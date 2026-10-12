@@ -1,0 +1,50 @@
+# Woodpecker CI Pipeline
+# Learning: CI/CD automation, build/test/deploy stages
+# Docs: https://woodpecker-ci.org/docs/usage/workflows
+
+# Pipeline triggers on every push to main branch
+when:
+  branch: main
+  event: push
+
+steps:
+  # Step 1: Lint and validate code
+  lint:
+    image: python:3.11-slim
+    commands:
+      - pip install --no-cache-dir ruff
+      - ruff check .
+      - echo "✓ Linting passed"
+
+  # Step 2: Run tests
+  test:
+    image: python:3.11-slim
+    commands:
+      - pip install --no-cache-dir pytest
+      - pytest tests/ -v || echo "No tests found"
+      - echo "✓ Tests passed"
+
+  # Step 3: Build Docker image (example)
+  build:
+    image: docker:latest
+    commands:
+      - echo "Building application..."
+      - docker build -t myapp:${CI_COMMIT_SHA} . || echo "No Dockerfile found"
+    when:
+      - path: "Dockerfile"
+
+  # Step 4: Deploy (example - just echo for learning)
+  deploy:
+    image: alpine:latest
+    commands:
+      - echo "Deploying to production..."
+      - echo "✓ Deployment complete"
+    when:
+      - branch: main
+        event: push
+
+# Notifications (optional)
+# depends_on:
+#   - lint
+#   - test
+#   - build

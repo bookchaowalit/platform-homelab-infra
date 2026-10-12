@@ -1,0 +1,16 @@
+# Grafana Dashboard Provisioning
+# Auto-loads dashboards from /var/lib/grafana/dashboards
+
+apiVersion: 1
+
+providers:
+  - name: 'Solo Empire'
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false

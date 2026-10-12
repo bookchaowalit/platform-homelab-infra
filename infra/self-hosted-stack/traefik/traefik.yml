@@ -1,0 +1,51 @@
+# Traefik Static Configuration
+# Entry points and providers for the Solo Empire LOCAL LAB stack.
+#
+# SECURITY:
+# - This file is for local development/learning only.
+# - The dashboard is not published by docker-compose.
+# - Do not set api.insecure=true or publish the dashboard in any
+#   non-local environment. Production ingress belongs on Kubernetes (infra/platform/).
+
+api:
+  dashboard: true
+  # The dashboard has no published router in the local Compose lab.
+  # Keep the insecure catch-all entrypoint disabled.
+  insecure: false
+
+ping: {}
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: false
+  websecure:
+    address: ":443"
+  traefik:
+    # Reserved internal admin entrypoint; Compose does not publish it.
+    address: ":8088"
+
+providers:
+  docker:
+    # Use the read-only Docker API proxy on the internal docker-control-net
+    # instead of mounting the host socket into Traefik.
+    endpoint: "http://docker-socket-proxy:2375"
+    exposedByDefault: false
+    network: solo-empire-net
+  file:
+    directory: "/etc/traefik/dynamic"
+    watch: true
+
+log:
+  level: INFO
+
+accessLog: {}
+
+metrics:
+  prometheus:
+    entryPoint: "web"

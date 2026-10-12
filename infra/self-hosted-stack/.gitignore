@@ -1,0 +1,15 @@
+# Runtime data directories (Docker-managed, root-owned)
+adguard/conf/
+adguard/work/
+synapse/
+
+# Generated certificates
+traefik/dynamic/*.yml
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Database files in duckdb/
+duckdb/*.db
+duckdb/*.db.*

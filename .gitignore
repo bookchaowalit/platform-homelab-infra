@@ -1,0 +1,6 @@
+.env
+!.env.example
+__pycache__/
+*.pyc
+infra/self-hosted-stack/.env
+infra/self-hosted-stack/frappe/.runtime/

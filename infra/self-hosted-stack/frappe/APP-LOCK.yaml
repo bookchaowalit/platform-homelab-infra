@@ -1,0 +1,53 @@
+version: 1
+status: internal-development-validated-with-runtime-patch
+fetched_at: 2026-08-10
+purpose: Internal Solo Empire Frappe suite candidate release train
+framework:
+  repository: https://github.com/frappe/frappe
+  branch: version-16
+  commit: 9523516cac25992bc2cd810e1015df8994c257f5
+apps:
+  - slug: erpnext
+    repository: https://github.com/frappe/erpnext
+    branch: version-16
+    commit: 22247ab7c57ab51b5e05c274e85321402d133a64
+  - slug: hrms
+    repository: https://github.com/frappe/hrms
+    branch: version-16
+    commit: f281e8b172ac8836ad89c59df65a922101103097
+  - slug: telephony
+    repository: https://github.com/frappe/telephony
+    branch: develop
+    commit: e04272a4d6b78862cfdbde4256a06b2cab79a607
+    required_by: helpdesk
+  - slug: helpdesk
+    repository: https://github.com/frappe/helpdesk
+    branch: main
+    commit: 480486287b2b7179dd42a09c2a62fca9cc89c26d
+  - slug: crm
+    repository: https://github.com/frappe/crm
+    branch: develop
+    commit: 30fb69ad5005cf5bc903d91c40b6446c986f24e6
+  - slug: lms
+    repository: https://github.com/frappe/lms
+    branch: develop
+    commit: 91bc5478a766a111fc163d906274848c157bd978
+  - slug: payments
+    repository: https://github.com/frappe/payments
+    branch: version-16
+    commit: cca07d9f9392e2ea0e521c5975151db9e4b6c321
+    required_by: lms
+compatibility:
+  framework_line: "16"
+  dependency_metadata: compatible-with-framework-16
+  integration_smoke: passed-with-lms-search-compatibility-patch
+  production_approval: not-approved
+  runtime_image: solo-empire-frappe:16-candidate-fx-guard
+  runtime_patch: Containerfile
+  note: >-
+    The combined image/site passed build, install, login, migration,
+    backup/restore, and authenticated route smoke tests. The LMS search
+    override requires a narrow runtime compatibility patch until upstream
+    LMS accepts Frappe 16 continuation arguments. Production approval still
+    requires named-user role, secret, network, privacy/data-contract, and
+    upgrade review.

@@ -1,0 +1,29 @@
+version: 1
+status: candidate-validated
+purpose: >-
+  Stable, non-secret identity fields for a future read-only Solo Empire to
+  Frappe projection. The fields are metadata only; no source records are seeded.
+contract_version: frappe-projection.v1
+fields:
+  - doctype: CRM Lead
+    source_table: opportunities
+    source_id_field: custom_solo_empire_source_id
+    source_table_field: custom_solo_empire_source_table
+    contract_version_field: custom_solo_empire_contract_version
+  - doctype: Customer
+    source_table: clients
+    source_id_field: custom_solo_empire_source_id
+    source_table_field: custom_solo_empire_source_table
+    contract_version_field: custom_solo_empire_contract_version
+  - doctype: CRM Deal
+    source_table: crm_deals
+    source_id_field: custom_solo_empire_source_id
+    source_table_field: custom_solo_empire_source_table
+    contract_version_field: custom_solo_empire_contract_version
+field_policy:
+  type: Data
+  source_id_unique_per_doctype: true
+  hidden_from_standard_lists: true
+  no_copy: true
+  contains_secret: false
+  contains_record_payload: false

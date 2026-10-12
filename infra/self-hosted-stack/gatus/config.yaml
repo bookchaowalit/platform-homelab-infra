@@ -1,0 +1,633 @@
+# Gatus Health Check Configuration
+# Monitors all 81 lightweight services in the self-hosted stack
+# Learning: Uptime monitoring, health endpoints, alerting
+
+# Web UI available at http://localhost:3027
+
+endpoints:
+  # ============================================================
+  # Wave 1: Core Infrastructure (8 services)
+  # ============================================================
+  - name: Traefik
+    group: Core Infrastructure
+    url: "http://se-traefik:8088/api/overview"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].http.totalRouterCount >= 0"
+
+  - name: Portainer
+    group: Core Infrastructure
+    url: "http://se-portainer:9000/api/system/status"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Dozzle
+    group: Core Infrastructure
+    url: "http://se-dozzle:8080"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Watchtower
+    group: Core Infrastructure
+    url: "tcp://se-watchtower:8080"
+    interval: 5m
+    conditions:
+      - "[CONNECTED] == true"
+    enabled: false  # No exposed port
+
+  - name: Autoheal
+    group: Core Infrastructure
+    url: "tcp://se-autoheal:0"
+    interval: 5m
+    conditions:
+      - "[CONNECTED] == true"
+    enabled: false  # Background daemon
+
+  - name: Diun
+    group: Core Infrastructure
+    url: "tcp://se-diun:0"
+    interval: 5m
+    conditions:
+      - "[CONNECTED] == true"
+    enabled: false  # Background daemon
+
+  - name: cAdvisor
+    group: Core Infrastructure
+    url: "http://se-cadvisor:8080/healthz"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Docker Socket Proxy
+    group: Core Infrastructure
+    url: "tcp://se-docker-socket-proxy:2375"
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+
+  # ============================================================
+  # Wave 2: Monitoring & Observability (6 services)
+  # ============================================================
+  - name: Prometheus
+    group: Monitoring
+    url: "http://se-prometheus:9090/-/healthy"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Grafana
+    group: Monitoring
+    url: "http://se-grafana:3000/api/health"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Node Exporter
+    group: Monitoring
+    url: "http://se-node-exporter:9100/metrics"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Alertmanager
+    group: Monitoring
+    url: "http://se-alertmanager:9093/-/healthy"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Loki
+    group: Monitoring
+    url: "http://se-loki:3100/ready"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Uptime Kuma
+    group: Monitoring
+    url: "http://se-uptime-kuma:3001"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  # ============================================================
+  # Wave 3: Databases (6 services)
+  # ============================================================
+  - name: PostgreSQL
+    group: Databases
+    url: "tcp://se-postgres:5432"
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+
+  - name: Valkey (Redis)
+    group: Databases
+    url: "tcp://se-valkey:6379"
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+
+  - name: PocketBase
+    group: Databases
+    url: "tcp://se-pocketbase:8090"
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+
+  - name: PgBouncer
+    group: Databases
+    url: "tcp://se-pgbouncer:5432"
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+
+  - name: Adminer
+    group: Databases
+    url: "http://se-adminer:8080"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  # ============================================================
+  # Wave 4: Search & Discovery (5 services)
+  # ============================================================
+  - name: Meilisearch
+    group: Search
+    url: "http://se-meilisearch:7700/health"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: SearXNG
+    group: Search
+    url: "http://se-searxng:8080"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: linkding
+    group: Search
+    url: "http://se-linkding:9090"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: YOURLS
+    group: Search
+    url: "http://se-yourls:80"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Whoogle
+    group: Search
+    url: "http://se-whoogle:5000"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  # ============================================================
+  # Wave 5: Communication & Notifications (3 services)
+  # ============================================================
+  - name: Listmonk
+    group: Communication
+    url: "tcp://se-listmonk:9000"
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+
+  - name: ntfy
+    group: Communication
+    url: "http://se-ntfy:80/v1/health"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Roundcube
+    group: Communication
+    url: "http://se-roundcube:80"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  # ============================================================
+  # Wave 6: Security (3 services)
+  # ============================================================
+  - name: Vaultwarden
+    group: Security
+    url: "http://se-vaultwarden:80/alive"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Step CA
+    group: Security
+    url: "tcp://se-step-ca:9000"
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+
+  - name: Trivy
+    group: Security
+    url: "tcp://se-trivy:8080"
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+
+  # ============================================================
+  # Wave 7: File & Storage (4 services)
+  # ============================================================
+  - name: Filebrowser
+    group: Storage
+    url: "http://se-filebrowser:80/health"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: SFTPGo
+    group: Storage
+    url: "http://se-sftpgo:8080/api/v2/status"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Stirling PDF
+    group: Storage
+    url: "http://se-stirling-pdf:8080"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Alist
+    group: Storage
+    url: "http://se-alist:5244/api/public/settings"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  # ============================================================
+  # Wave 8: Developer & CI/CD Tools (6 services)
+  # ============================================================
+  - name: Gitea
+    group: DevOps
+    url: "http://se-gitea:3000/api/v1/version"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Woodpecker Server
+    group: DevOps
+    url: "http://se-woodpecker-server:8000/"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Woodpecker Agent
+    group: DevOps
+    url: "tcp://se-woodpecker-agent:3000"
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+
+  - name: HttpBin
+    group: DevOps
+    url: "http://se-httpbin:80/get"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: MockServer
+    group: DevOps
+    url: "http://se-mockserver:1080/mockserver/status"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Hoppscotch
+    group: DevOps
+    url: "tcp://se-hoppscotch:3000"
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+
+  # ============================================================
+  # Wave 9: Networking (4 services)
+  # ============================================================
+  - name: CoreDNS
+    group: Networking
+    url: "tcp://se-coredns:53"
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+
+  - name: Caddy
+    group: Networking
+    url: "http://se-caddy:80/"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: OAuth2 Proxy
+    group: Networking
+    url: "http://se-oauth2-proxy:4180/ping"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  # ============================================================
+  # Wave 10: Collaboration & Notes (5 services)
+  # ============================================================
+  - name: Memos
+    group: Collaboration
+    url: "http://se-memos:5230"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Excalidraw
+    group: Collaboration
+    url: "http://se-excalidraw:80"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: CryptPad
+    group: Collaboration
+    url: "http://se-cryptpad:3000"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Joplin Server
+    group: Collaboration
+    url: "http://se-joplin:22300/api/ping"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  # ============================================================
+  # Wave 11: RSS & Content (2 services)
+  # ============================================================
+  - name: Miniflux
+    group: RSS
+    url: "http://se-miniflux:8080/healthcheck"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Nitter
+    group: RSS
+    url: "http://se-nitter:8080"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  # ============================================================
+  # Wave 12: Data & Analytics (7 services)
+  # ============================================================
+  - name: InfluxDB
+    group: Data
+    url: "http://se-influxdb:8086/ping"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 204"
+
+  - name: Qdrant
+    group: Data
+    url: "http://se-qdrant:6333/healthz"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: NATS
+    group: Data
+    url: "tcp://se-nats:4222"
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+
+  - name: Mosquitto (MQTT)
+    group: Data
+    url: "tcp://se-mosquitto:1883"
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+
+  - name: PostgREST
+    group: Data
+    url: "http://se-postgrest:3000/"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Redis Commander
+    group: Data
+    url: "http://se-redis-commander:8081"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  # ============================================================
+  # Wave 13: AI & Translation (3 services)
+  # ============================================================
+  - name: LibreTranslate
+    group: AI
+    url: "http://se-libretranslate:5000/languages"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: LobeChat
+    group: AI
+    url: "http://se-lobechat:3210"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: BreezeWiki
+    group: AI
+    url: "http://se-breezewiki:8000"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  # ============================================================
+  # Wave 14: Publishing & Blogging (2 services)
+  # ============================================================
+  - name: Ghost
+    group: Publishing
+    url: "http://se-ghost:2368"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: BookStack
+    group: Publishing
+    url: "http://se-bookstack:80"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  # ============================================================
+  # Wave 15: Dashboards (1 service)
+  # ============================================================
+  - name: Homer
+    group: Dashboards
+    url: "http://se-homer:8080"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  # ============================================================
+  # Wave 16: Advanced Monitoring (5 services)
+  # ============================================================
+  - name: Tempo
+    group: Advanced Monitoring
+    url: "http://se-tempo:3200/ready"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Pushgateway
+    group: Advanced Monitoring
+    url: "http://se-pushgateway:9091/metrics"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Blackbox Exporter
+    group: Advanced Monitoring
+    url: "http://se-blackbox-exporter:9115/metrics"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Graphite
+    group: Advanced Monitoring
+    url: "http://se-graphite:80"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Umami
+    group: Advanced Monitoring
+    url: "http://se-umami:3000/api/auth/me"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  # ============================================================
+  # Wave 17: Media & File Utilities (2 services)
+  # ============================================================
+  - name: imgproxy
+    group: Media
+    url: "http://se-imgproxy:8080/health"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: MinIO
+    group: Media
+    url: "http://se-minio:9000/minio/health/live"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  # ============================================================
+  # Wave 18: Knowledge & Q&A (2 services)
+  # ============================================================
+  - name: Answer
+    group: Knowledge
+    url: "http://se-answer:80"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Outline
+    group: Knowledge
+    url: "http://se-outline:3000"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  # ============================================================
+  # Wave 19: Finance & Utilities (4 services)
+  # ============================================================
+  - name: Firefly III
+    group: Finance
+    url: "http://se-firefly:8080/health"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Metabase
+    group: Finance
+    url: "http://se-metabase:3000/api/health"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Sharry
+    group: Finance
+    url: "http://se-sharry:9090/api/info"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Tyk Gateway
+    group: Finance
+    url: "http://se-tyk:8080/hello"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  # ============================================================
+  # Wave 20: Specialized Tools (7 services)
+  # ============================================================
+  - name: SpiceDB
+    group: Specialized
+    url: "http://se-spicedb:8443"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Kestra
+    group: Specialized
+    url: "http://se-kestra:8080/health"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Traccar
+    group: Specialized
+    url: "http://se-traccar:8082"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: JSON Schema Validator
+    group: Specialized
+    url: "tcp://se-jsonschema:0"
+    interval: 5m
+    conditions:
+      - "[CONNECTED] == true"
+    enabled: false  # CLI-only, no network endpoint
+
+  - name: Squid Proxy
+    group: Specialized
+    url: "tcp://se-squid:3128"
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+
+# Storage configuration
+storage:
+  type: sqlite
+  path: /data/gatus.db
+
+# Web UI configuration
+web:
+  port: 8080

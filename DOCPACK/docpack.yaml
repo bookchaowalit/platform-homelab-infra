@@ -1,0 +1,8 @@
+system_id: bookchaowalit/private/solo-homelab
+prefix: CARD
+brand: "HOMELAB"
+subtitle: "Self-hosted stack: Compose (observability, Gitea, MinIO ฯลฯ) และ Frappe/ERPNext"
+footer: "solo-homelab — Product Card"
+color: "#6d597a"
+audience: internal
+tier: L0

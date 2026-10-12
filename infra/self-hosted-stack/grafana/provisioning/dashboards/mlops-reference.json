@@ -1,0 +1,50 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "title": "Serving Target Status",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "up{job=\"solo-empire-mlops-reference\"}", "legendFormat": "Serving" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [{ "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }], "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } } }
+    },
+    {
+      "title": "Loaded Model",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "targets": [{ "expr": "solo_empire_mlops_model_info", "legendFormat": "{{ model_name }} / {{ model_version }}" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } } }
+    },
+    {
+      "title": "Requests / Second",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [{ "expr": "sum(rate(solo_empire_mlops_requests_total[5m]))", "legendFormat": "requests/s" }],
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 20 } } }
+    },
+    {
+      "title": "Predictions / Second",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "targets": [{ "expr": "sum(rate(solo_empire_mlops_predictions_total[5m]))", "legendFormat": "predictions/s" }],
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 20 } } }
+    },
+    {
+      "title": "Error Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [{ "expr": "sum(rate(solo_empire_mlops_errors_total[5m])) / clamp_min(sum(rate(solo_empire_mlops_requests_total[5m])), 1)", "legendFormat": "errors/requests" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "custom": { "fillOpacity": 20 }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.01 }, { "color": "red", "value": 0.05 }] } } }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["solo-empire", "mlops", "reference"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "Solo Empire - MLOps Reference",
+  "uid": "solo-empire-mlops",
+  "version": 1
+}

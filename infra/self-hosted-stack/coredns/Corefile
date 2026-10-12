@@ -1,0 +1,15 @@
+# Solo Empire Local DNS
+# Wildcard: resolves ALL *.local domains to 127.0.0.1 (Traefik handles routing)
+# New services are automatically resolved - no manual DNS config needed!
+.:53 {
+    # Wildcard resolution for *.local → 127.0.0.1
+    template IN A local {
+        match ".*\.local\.$"
+        answer "{{ .Name }} 60 IN A 127.0.0.1"
+        fallthrough
+    }
+    # Forward everything else to public DNS
+    forward . 8.8.8.8 1.1.1.1
+    log
+    errors
+}

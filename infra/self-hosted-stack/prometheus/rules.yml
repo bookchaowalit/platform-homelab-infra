@@ -1,0 +1,167 @@
+# Prometheus Alert Rules
+# Solo Empire self-hosted stack monitoring alerts
+
+groups:
+  # ── Infrastructure Alerts ──────────────────────────────────────
+  - name: infrastructure
+    rules:
+      - alert: InstanceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} is down"
+          description: "{{ $labels.instance }} of job {{ $labels.job }} has been down for more than 2 minutes."
+
+      - alert: InstanceHighCPU
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is above 85% for more than 5 minutes."
+
+      - alert: InstanceHighMemory
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 85% for more than 5 minutes."
+
+      - alert: InstanceDiskSpaceLow
+        expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk space low on {{ $labels.instance }}"
+          description: "Disk usage is above 85% on {{ $labels.mountpoint }}."
+
+      - alert: InstanceDiskSpaceCritical
+        expr: (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk space critical on {{ $labels.instance }}"
+          description: "Disk usage is above 95% on {{ $labels.mountpoint }}."
+
+      - alert: ContainerHighMemory
+        expr: container_memory_usage_bytes / container_spec_memory_limit_bytes * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} using >90% memory limit"
+
+  # ── Traefik Alerts ────────────────────────────────────────────
+  - name: traefik
+    rules:
+      - alert: TraefikHighErrorRate
+        expr: sum(rate(traefik_service_requests_total{code=~"5.."}[5m])) / sum(rate(traefik_service_requests_total[5m])) * 100 > 5
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Traefik high error rate"
+          description: "More than 5% of requests are returning 5xx errors."
+
+      - alert: TraefikHighLatency
+        expr: histogram_quantile(0.99, sum(rate(traefik_service_request_duration_seconds_bucket[5m])) by (le)) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Traefik high latency"
+          description: "99th percentile request duration is above 5 seconds."
+
+  # ── Service Health Alerts ─────────────────────────────────────
+  - name: services
+    rules:
+      - alert: ServiceDown
+        expr: up{job!~"prometheus|node-exporter"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "{{ $labels.instance }} has been unreachable for 3 minutes."
+
+      - alert: PrometheusConfigReloadFailure
+        expr: prometheus_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus config reload failed"
+
+      - alert: TooManyOpenFileDescriptors
+        expr: process_open_fds / process_max_fds * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job }} has too many open file descriptors"
+
+  # ── MLOps Reference Serving Alerts ───────────────────────────
+  # The scrape target file is empty by default, so these rules stay inactive
+  # until an operator explicitly adds a reachable /metrics target.
+  - name: mlops-reference
+    rules:
+      - alert: MLOpsReferenceServingDown
+        expr: up{job="solo-empire-mlops-reference"} == 0
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MLOps reference serving is down"
+          description: "The configured reference model /metrics endpoint has been unreachable for 3 minutes."
+
+      - alert: MLOpsReferenceErrorRateHigh
+        expr: sum(rate(solo_empire_mlops_errors_total[5m])) / clamp_min(sum(rate(solo_empire_mlops_requests_total[5m])), 1) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MLOps reference serving error rate is high"
+          description: "More than 5% of reference model requests have failed for 5 minutes."
+
+      - alert: MLOpsReferenceModelMissing
+        expr: absent(solo_empire_mlops_model_info) and on() (up{job="solo-empire-mlops-reference"} == 1)
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MLOps reference target has no loaded model"
+          description: "The serving target is reachable but has not exposed model metadata."
+
+  # ── Database Alerts ───────────────────────────────────────────
+  - name: databases
+    rules:
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL instance is down"
+
+      - alert: PostgresHighConnections
+        expr: pg_stat_activity_count > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL high connection count"
+
+      - alert: RedisHighMemory
+        expr: redis_memory_used_bytes / redis_memory_max_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis/Valkey memory usage above 85%"

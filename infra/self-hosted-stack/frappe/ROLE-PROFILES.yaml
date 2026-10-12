@@ -1,0 +1,66 @@
+version: 1
+status: candidate-baseline
+site: solo-empire.localhost
+purpose: >-
+  Least-privilege role-profile baseline for the private Solo Empire Frappe
+  candidate. These profiles do not create users or custom DocType permissions.
+administrator_policy: break-glass-only
+profiles:
+  - name: Solo Empire Owner
+    roles:
+      - System Manager
+      - Sales Manager
+      - Sales Master Manager
+      - Accounts Manager
+      - Projects Manager
+      - HR Manager
+      - Agent Manager
+      - Course Creator
+    use: approval, configuration, and cross-module ownership
+    routine_use: false
+  - name: Solo Empire Commercial
+    roles:
+      - Sales User
+      - Sales Manager
+      - Sales Master Manager
+    use: CRM leads, deals, customer context, and commercial follow-up
+    routine_use: true
+  - name: Solo Empire Finance
+    roles:
+      - Accounts User
+      - Accounts Manager
+    use: invoices, accounting review, and reconciliation
+    routine_use: true
+  - name: Solo Empire Delivery
+    roles:
+      - Projects User
+      - Projects Manager
+    use: projects, tasks, and delivery execution
+    routine_use: true
+  - name: Solo Empire Learning
+    roles:
+      - LMS Student
+      - Course Creator
+    use: LMS learning and course authoring
+    routine_use: true
+  - name: Solo Empire HR
+    roles:
+      - Employee
+      - HR User
+      - HR Manager
+      - Leave Approver
+      - Expense Approver
+    use: HRMS and personal employment records
+    routine_use: true
+  - name: Solo Empire Support
+    roles:
+      - Agent
+      - Agent Manager
+      - Support Team
+    use: Helpdesk triage, ticket assignment, and support knowledge
+    routine_use: true
+controls:
+  - Do not assign Administrator for routine work.
+  - Do not add custom permissions until the data contract and security review pass.
+  - Keep payroll, private HR, and financial authority restricted to named users.
+  - Review profiles after every app upgrade or material permission change.

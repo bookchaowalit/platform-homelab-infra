@@ -1,0 +1,2201 @@
+# =============================================================================
+# WARNING: LOCAL DEVELOPMENT / LEARNING LAB ONLY
+# =============================================================================
+# This Docker Compose stack is for local development and learning on a trusted
+# workstation (e.g. WSL2). It is NOT production infrastructure.
+#
+# Do NOT:
+#   - Expose this stack to the public internet
+#   - Use these services as a production deployment target
+#   - Rely on Watchtower/auto-update for production image updates
+#   - Commit a populated .env file (use .env.example as the template)
+#
+# Production workloads belong on the Kubernetes application platform under
+# infra/platform/ (Helm + GitOps + policies). See:
+#   operations/platform/KUBERNETES-PLATFORM-READINESS.md
+# =============================================================================
+#
+# Solo Empire Self-Hosted Infrastructure Stack (lab)
+# Lightweight services for learning data engineering, DevOps, and observability.
+# Copy .env.example to .env and set secrets before starting:
+#   cp .env.example .env
+#
+# Start by PROFILE (do not run all ~80 services at once):
+#   docker compose --profile core --profile observability up -d
+#   docker compose --profile core --profile devsecops up -d
+#   docker compose --profile core --profile data up -d
+# Profiles: core | observability | devsecops | data | streaming | optional |
+#           docker-control | docker-admin | lab-auto-update | disabled
+#
+networks:
+  solo-empire-net:
+    driver: bridge
+    name: solo-empire-net
+  # Only Traefik and the read-only Docker API proxy join this internal network.
+  docker-control-net:
+    driver: bridge
+    internal: true
+    name: solo-empire-docker-control
+
+volumes:
+  # Core
+  traefik-certs:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+  postgres-data:
+  gitea-data:
+  vaultwarden-data:
+  portainer-data:
+  # Databases
+  valkey-data:
+  pocketbase-data:
+  influxdb-data:
+  qdrant-data:
+  # Messaging
+  nats-data:
+  mosquitto-data:
+  redpanda-data:
+  streaming-state:
+  # Search
+  meilisearch-data:
+  searxng-data:
+  linkding-data:
+  yourls-data:
+  # Communication
+  listmonk-data:
+  ntfy-data:
+  # File & Storage
+  filebrowser-data:
+  sftpgo-data:
+  stirling-data:
+  alist-data:
+  # Dev Tools
+  woodpecker-data:
+  woodpecker-config:
+  mockserver-data:
+  tyk-data:
+  tyk-mongo:
+  # Networking
+  coredns-data:
+  caddy-data:
+  oauth2-proxy-data:
+  # Collaboration
+  memos-data:
+  excalidraw-data:
+  cryptpad-data:
+  joplin-data:
+  # RSS
+  miniflux-data:
+  # Analytics
+  umami-data:
+  metabase-data:
+  graphite-data:
+  # Publishing
+  ghost-data:
+  bookstack-data:
+  bookstack-db-data:
+  # Dashboard
+  homer-data:
+  # AI
+  libretranslate-data:
+  lobechat-data:
+  # Email
+  roundcube-data:
+  # Misc
+  step-ca-data:
+  diun-data:
+  uptime-kuma-data:
+  tempo-data:
+  answer-data:
+  nitter-data:
+  breezewiki-data:
+  imgproxy-data:
+  squid-data:
+  pgbouncer-data:
+  firefly-data:
+  spicedb-data:
+  kestra-data:
+  traccar-data:
+  outline-data:
+  minio-data:
+  pushgateway-data:
+  sharry-data:
+  alertmanager-data:
+  blackbox-data:
+  caddy-config:
+
+# Shared runtime image configuration for the optional lake workers. This is a
+# top-level Compose extension field, so it is not itself a service/container.
+x-data-lake-runtime: &data-lake-runtime
+  build:
+    context: ..
+    dockerfile: self-hosted-stack/data-lake/Dockerfile
+  image: solo-empire-data-lake:local
+  restart: unless-stopped
+  profiles:
+    - streaming
+  volumes:
+    - ${SOLO_EMPIRE_DATA_LAKE_PATH:-../../data/lake}:/var/lib/solo-empire/lake
+    - streaming-state:/var/lib/solo-empire/state
+  networks:
+    - solo-empire-net
+  deploy:
+    resources:
+      limits:
+        cpus: "0.50"
+        memory: 512M
+      reservations:
+        cpus: "0.05"
+        memory: 128M
+  labels:
+    - "traefik.enable=false"
+
+services:
+  # ============================================================
+  # Wave 1: Core Infrastructure (8 services)
+  # ============================================================
+
+  # 1. Traefik - Reverse Proxy & Load Balancer (~30MB)
+  traefik:
+    image: traefik:v3.6
+    container_name: se-traefik
+    restart: unless-stopped
+    profiles:
+      - core
+      - shared-platform
+    ports:
+      # Local-only by default. A trusted LAN/public deployment must opt in
+      # through an explicit ingress boundary instead of widening this lab.
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
+    depends_on:
+      - docker-socket-proxy
+    volumes:
+      - traefik-certs:/letsencrypt
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./traefik/certs:/etc/traefik/certs:ro
+    environment:
+      - DOCKER_API_VERSION=1.44
+    networks:
+      - solo-empire-net
+      - docker-control-net
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 64M
+    labels:
+      # Keep the administrative dashboard disabled until an authenticated
+      # local admin route is explicitly designed and tested.
+      - "traefik.enable=false"
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # 2. Portainer - Container Management UI (~50MB)
+  portainer:
+    image: portainer/portainer-ce:2.21.4
+    container_name: se-portainer
+    restart: unless-stopped
+    profiles:
+      - docker-admin
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - portainer-data:/data
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.rule=Host(`portainer.local`)"
+      - "traefik.http.routers.portainer.entrypoints=websecure"
+      - "traefik.http.routers.portainer.tls=true"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+
+  # 3. Dozzle - Docker Log Viewer (~10MB)
+  dozzle:
+    image: amir20/dozzle:v8.8.1
+    container_name: se-dozzle
+    restart: unless-stopped
+    profiles:
+      - docker-admin
+    environment:
+      - DOZZLE_LEVEL=info
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dozzle.rule=Host(`dozzle.local`)"
+      - "traefik.http.routers.dozzle.entrypoints=websecure"
+      - "traefik.http.routers.dozzle.tls=true"
+      - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
+
+  # 4. Watchtower - Auto-update Containers (~5MB)
+  watchtower:
+    image: containrrr/watchtower:1.7.1
+    container_name: se-watchtower
+    restart: unless-stopped
+    profiles:
+      - lab-auto-update
+    # LAB ONLY: direct Docker control; not for production update workflows.
+    # Enable with:
+    #   docker compose --profile lab-auto-update up -d
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=86400
+      - WATCHTOWER_LABEL_ENABLE=true
+      - DOCKER_API_VERSION=1.44
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=false"
+
+  # 5. Autoheal - Auto-restart Unhealthy Containers (~5MB)
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    container_name: se-autoheal
+    restart: unless-stopped
+    profiles:
+      - docker-control
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=false"
+
+  # 6. Diun - Docker Image Update Notifier (~10MB)
+  diun:
+    image: crazymax/diun:4.28.0
+    container_name: se-diun
+    restart: unless-stopped
+    profiles:
+      - docker-control
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - diun-data:/data
+    environment:
+      - DIUN_WATCH_FIRSTCHECKNOTIF=true
+      - DIUN_WATCH_SCHEDULE=0 */6 * * *
+      - DIUN_PROVIDERS_DOCKER=true
+      - DIUN_PROVIDERS_DOCKER_WATCHBYDEFAULT=true
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=false"
+
+  # 7. cAdvisor - Container Metrics (~15MB)
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: se-cadvisor
+    restart: unless-stopped
+    profiles:
+      - docker-control
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cadvisor.rule=Host(`cadvisor.local`)"
+      - "traefik.http.routers.cadvisor.entrypoints=websecure"
+      - "traefik.http.routers.cadvisor.tls=true"
+      - "traefik.http.services.cadvisor.loadbalancer.server.port=8080"
+
+  # 8. Docker Socket Proxy - Secure Docker API (~5MB)
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.2.0
+    container_name: se-docker-socket-proxy
+    restart: unless-stopped
+    profiles:
+      - core
+      - shared-platform
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      # Traefik needs read-only discovery and event streaming only.
+      - POST=0
+      - DELETE=0
+      - CONTAINERS=1
+      - EVENTS=1
+      - INFO=1
+      - NETWORKS=1
+    networks:
+      - docker-control-net
+    labels:
+      - "traefik.enable=false"
+
+  # ============================================================
+  # Wave 2: Monitoring & Observability (6 services)
+  # ============================================================
+
+  # 9. Prometheus - Metrics Collection (~50MB)
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: se-prometheus
+    restart: unless-stopped
+    profiles:
+      - observability
+      - shared-platform
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+      - ./prometheus/mlops-targets.json:/etc/prometheus/mlops-targets.json:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+    networks:
+      - solo-empire-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.local`)"
+      - "traefik.http.routers.prometheus.entrypoints=websecure"
+      - "traefik.http.routers.prometheus.tls=true"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+
+  # 10. Grafana - Dashboards & Visualization (~60MB)
+  grafana:
+    image: grafana/grafana:10.4.1
+    container_name: se-grafana
+    restart: unless-stopped
+    profiles:
+      - observability
+      - shared-platform
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - solo-empire-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.local`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls=true"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+
+  # 11. Node Exporter - System Metrics (~10MB)
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: se-node-exporter
+    restart: unless-stopped
+    profiles:
+      - observability
+      - shared-platform
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=false"
+
+  # 12. Alertmanager - Alert Routing (~15MB)
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: se-alertmanager
+    restart: unless-stopped
+    profiles:
+      - observability
+      - shared-platform
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/etc/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.alertmanager.rule=Host(`alertmanager.local`)"
+      - "traefik.http.routers.alertmanager.entrypoints=websecure"
+      - "traefik.http.routers.alertmanager.tls=true"
+      - "traefik.http.services.alertmanager.loadbalancer.server.port=9093"
+
+  # 13. Loki - Log Aggregation (~30MB)
+  loki:
+    image: grafana/loki:2.9.4
+    container_name: se-loki
+    restart: unless-stopped
+    profiles:
+      - observability
+      - shared-platform
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+    networks:
+      - solo-empire-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.05"
+          memory: 64M
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.loki.rule=Host(`loki.local`)"
+      - "traefik.http.routers.loki.entrypoints=websecure"
+      - "traefik.http.routers.loki.tls=true"
+      - "traefik.http.services.loki.loadbalancer.server.port=3100"
+
+  # 14. Uptime Kuma - Uptime Monitoring (~30MB)
+  uptime-kuma:
+    image: louislam/uptime-kuma:1.23.13
+    container_name: se-uptime-kuma
+    restart: unless-stopped
+    profiles:
+      - docker-control
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - uptime-kuma-data:/app/data
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.uptime.rule=Host(`uptime.local`)"
+      - "traefik.http.routers.uptime.entrypoints=websecure"
+      - "traefik.http.routers.uptime.tls=true"
+      - "traefik.http.services.uptime.loadbalancer.server.port=3001"
+
+  # ============================================================
+  # Wave 3: Databases (6 services)
+  # ============================================================
+
+  # 15. PostgreSQL - Primary Database (~30MB)
+  postgres:
+    image: postgres:16.3-alpine
+    container_name: se-postgres
+    restart: unless-stopped
+    profiles:
+      - data
+      - optional
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - solo-empire-net
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+    labels:
+      - "traefik.enable=false"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 16. Valkey - Redis-compatible Cache (~15MB)
+  valkey:
+    image: valkey/valkey:7.2.6-alpine
+    container_name: se-valkey
+    restart: unless-stopped
+    profiles:
+      - data
+      - optional
+    volumes:
+      - valkey-data:/data
+    networks:
+      - solo-empire-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+        reservations:
+          cpus: "0.05"
+          memory: 32M
+    labels:
+      - "traefik.enable=false"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # 17. PocketBase - Lightweight Backend (~15MB)
+  pocketbase:
+    image: ghcr.io/muchobien/pocketbase:0.22.21
+    container_name: se-pocketbase
+    restart: unless-stopped
+    profiles:
+      - data
+    volumes:
+      - pocketbase-data:/pb_data
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pocketbase.rule=Host(`pocketbase.local`)"
+      - "traefik.http.routers.pocketbase.entrypoints=websecure"
+      - "traefik.http.routers.pocketbase.tls=true"
+      - "traefik.http.services.pocketbase.loadbalancer.server.port=8090"
+
+  # 19. PgBouncer - Connection Pooling (~5MB)
+  pgbouncer:
+    image: edoburu/pgbouncer@sha256:4c1ca296ef525f108f5d3552cc337c0c09587cf8dae7f0067fd93349e47dc1cd
+    container_name: se-pgbouncer
+    restart: unless-stopped
+    profiles:
+      - data
+      - optional
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@se-postgres:5432/${POSTGRES_DB}
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=100
+    depends_on:
+      - postgres
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=false"
+
+  # 20. Adminer - Database Manager (~10MB)
+  adminer:
+    image: adminer:4.8.1
+    container_name: se-adminer
+    restart: unless-stopped
+    profiles:
+      - optional
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.adminer.rule=Host(`adminer.local`)"
+      - "traefik.http.routers.adminer.entrypoints=websecure"
+      - "traefik.http.routers.adminer.tls=true"
+      - "traefik.http.services.adminer.loadbalancer.server.port=8080"
+
+  # ============================================================
+  # Wave 4: Search & Discovery (5 services)
+  # ============================================================
+
+  # 21. Meilisearch - Fast Search Engine (~30MB)
+  meilisearch:
+    image: getmeili/meilisearch:v1.6
+    container_name: se-meilisearch
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - MEILI_ENV=development
+      - MEILI_NO_ANALYTICS=true
+    volumes:
+      - meilisearch-data:/meili_data
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.meilisearch.rule=Host(`meilisearch.local`)"
+      - "traefik.http.routers.meilisearch.entrypoints=websecure"
+      - "traefik.http.routers.meilisearch.tls=true"
+      - "traefik.http.services.meilisearch.loadbalancer.server.port=7700"
+
+  # 22. SearXNG - Privacy Search Engine (~40MB)
+  searxng:
+    image: searxng/searxng:2024.8.7-d8f7d6a08
+    container_name: se-searxng
+    restart: unless-stopped
+    profiles:
+      - optional
+    volumes:
+      - searxng-data:/etc/searxng
+      - searxng-data:/var/lib/searxng
+    environment:
+      - SEARXNG_BASE_URL=http://searxng.local
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.searxng.rule=Host(`searxng.local`)"
+      - "traefik.http.routers.searxng.entrypoints=websecure"
+      - "traefik.http.routers.searxng.tls=true"
+      - "traefik.http.services.searxng.loadbalancer.server.port=8080"
+
+  # 23. linkding - Bookmark Manager (~15MB)
+  linkding:
+    image: sissbruecker/linkding:1.31.0
+    container_name: se-linkding
+    restart: unless-stopped
+    profiles:
+      - optional
+    volumes:
+      - linkding-data:/etc/linkding/data
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.linkding.rule=Host(`linkding.local`)"
+      - "traefik.http.routers.linkding.entrypoints=websecure"
+      - "traefik.http.routers.linkding.tls=true"
+      - "traefik.http.services.linkding.loadbalancer.server.port=9090"
+
+  # 24. YoURLs - URL Shortener (~15MB)
+  yourls:
+    image: yourls:1.9.2
+    container_name: se-yourls
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - YOURLS_SITE=http://yourls.local
+      - YOURLS_USER=${YOURLS_USER}
+      - YOURLS_PASS=${YOURLS_PASS}
+    volumes:
+      - yourls-data:/var/www/html
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.yourls.rule=Host(`yourls.local`)"
+      - "traefik.http.routers.yourls.entrypoints=websecure"
+      - "traefik.http.routers.yourls.tls=true"
+      - "traefik.http.services.yourls.loadbalancer.server.port=80"
+
+  # 25. Whoogle - Search Proxy (~20MB)
+  whoogle:
+    image: benbusby/whoogle-search:0.9.1
+    container_name: se-whoogle
+    restart: unless-stopped
+    profiles:
+      - optional
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.whoogle.rule=Host(`whoogle.local`)"
+      - "traefik.http.routers.whoogle.entrypoints=websecure"
+      - "traefik.http.routers.whoogle.tls=true"
+      - "traefik.http.services.whoogle.loadbalancer.server.port=5000"
+
+  # ============================================================
+  # Wave 5: Communication & Notifications (3 services)
+  # ============================================================
+
+  # 26. Listmonk - Newsletter & Mailing List (~30MB)
+  listmonk:
+    image: listmonk/listmonk:v3.0.0
+    container_name: se-listmonk
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - LISTMONK_app__address=0.0.0.0:9000
+      - LISTMONK_db__host=se-postgres
+      - LISTMONK_db__port=5432
+      - LISTMONK_db__user=${POSTGRES_USER}
+      - LISTMONK_db__password=${POSTGRES_PASSWORD}
+      - LISTMONK_db__database=listmonk
+      - LISTMONK_db__ssl_mode=disable
+    depends_on:
+      - postgres
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.listmonk.rule=Host(`listmonk.local`)"
+      - "traefik.http.routers.listmonk.entrypoints=websecure"
+      - "traefik.http.routers.listmonk.tls=true"
+      - "traefik.http.services.listmonk.loadbalancer.server.port=9000"
+
+  # 27. ntfy - Push Notifications (~10MB)
+  ntfy:
+    image: binwiederhier/ntfy:v2.11.0
+    container_name: se-ntfy
+    restart: unless-stopped
+    profiles:
+      - optional
+    command: serve
+    volumes:
+      - ntfy-data:/var/cache/ntfy
+      - ntfy-data:/etc/ntfy
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ntfy.rule=Host(`ntfy.local`)"
+      - "traefik.http.routers.ntfy.entrypoints=websecure"
+      - "traefik.http.routers.ntfy.tls=true"
+      - "traefik.http.services.ntfy.loadbalancer.server.port=80"
+
+  # 28. Roundcube - Webmail Client (~30MB)
+  roundcube:
+    image: roundcube/roundcubemail:1.6.9-apache
+    container_name: se-roundcube
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - ROUNDCUBEMAIL_DEFAULT_HOST=mail.example.com
+      - ROUNDCUBEMAIL_SMTP_SERVER=smtp.example.com
+    volumes:
+      - roundcube-data:/var/roundcube/config
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.roundcube.rule=Host(`roundcube.local`)"
+      - "traefik.http.routers.roundcube.entrypoints=websecure"
+      - "traefik.http.routers.roundcube.tls=true"
+      - "traefik.http.services.roundcube.loadbalancer.server.port=80"
+
+  # ============================================================
+  # Wave 6: Security (3 services)
+  # ============================================================
+
+  # 29. Vaultwarden - Password Manager (~15MB)
+  vaultwarden:
+    image: vaultwarden/server:1.32.0
+    container_name: se-vaultwarden
+    restart: unless-stopped
+    profiles:
+      - devsecops
+      - shared-platform
+    environment:
+      - DOMAIN=https://vaultwarden.local
+      - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}
+    volumes:
+      - vaultwarden-data:/data
+    networks:
+      - solo-empire-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80/alive || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+        reservations:
+          cpus: "0.05"
+          memory: 32M
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vaultwarden.rule=Host(`vaultwarden.local`)"
+      - "traefik.http.routers.vaultwarden.entrypoints=websecure"
+      - "traefik.http.routers.vaultwarden.tls=true"
+      - "traefik.http.services.vaultwarden.loadbalancer.server.port=80"
+
+  # 30. Step CA - Local Certificate Authority (~15MB)
+  step-ca:
+    image: smallstep/step-ca:0.26.1
+    container_name: se-step-ca
+    restart: unless-stopped
+    profiles:
+      - devsecops
+      - shared-platform
+    volumes:
+      - step-ca-data:/home/step/.step
+    environment:
+      - DOCKER_STEPCA_INIT_NAME=Solo Empire CA
+      - DOCKER_STEPCA_INIT_DNS_NAMES=localhost,step-ca.local
+      - DOCKER_STEPCA_INIT_PROVISIONER_NAME=admin
+      - DOCKER_STEPCA_INIT_PASSWORD=${STEP_CA_PASSWORD}
+      - DOCKER_STEPCA_INIT_ADDRESS=:9000
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=false"
+
+  # 31. Trivy - Security Scanner (~40MB)
+  trivy:
+    image: aquasec/trivy:0.55.0
+    container_name: se-trivy
+    restart: unless-stopped
+    profiles:
+      - docker-control
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: server --token ${TRIVY_SERVER_TOKEN}
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=false"
+
+  # ============================================================
+  # Wave 7: File & Storage (4 services)
+  # ============================================================
+
+  # 32. Filebrowser - File Manager (~15MB)
+  filebrowser:
+    image: filebrowser/filebrowser:v2.30.0
+    container_name: se-filebrowser
+    restart: unless-stopped
+    profiles:
+      - optional
+    volumes:
+      - filebrowser-data:/srv
+      - filebrowser-data:/database
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.filebrowser.rule=Host(`files.local`)"
+      - "traefik.http.routers.filebrowser.entrypoints=websecure"
+      - "traefik.http.routers.filebrowser.tls=true"
+      - "traefik.http.services.filebrowser.loadbalancer.server.port=80"
+
+  # 33. SFTPGo - SFTP Server (~15MB)
+  sftpgo:
+    image: drakkan/sftpgo:v2.6.2
+    container_name: se-sftpgo
+    restart: unless-stopped
+    profiles:
+      - optional
+    volumes:
+      - sftpgo-data:/var/lib/sftpgo
+    environment:
+      - SFTPGO_HTTPD__BINDINGS__0__PORT=8080
+      - SFTPGO_HTTPD__BINDINGS__0__ADDRESS=0.0.0.0
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sftpgo.rule=Host(`sftpgo.local`)"
+      - "traefik.http.routers.sftpgo.entrypoints=websecure"
+      - "traefik.http.routers.sftpgo.tls=true"
+      - "traefik.http.services.sftpgo.loadbalancer.server.port=8080"
+
+  # 34. Stirling PDF - PDF Tools (~80MB)
+  stirling-pdf:
+    image: frooodle/s-pdf:0.28.3
+    container_name: se-stirling-pdf
+    restart: unless-stopped
+    profiles:
+      - optional
+    volumes:
+      - stirling-data:/usr/share/tessdata
+    environment:
+      - SYSTEM_ROOTURL=/
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.stirling.rule=Host(`pdf.local`)"
+      - "traefik.http.routers.stirling.entrypoints=websecure"
+      - "traefik.http.routers.stirling.tls=true"
+      - "traefik.http.services.stirling.loadbalancer.server.port=8080"
+
+  # 35. Alist - File List Program (~20MB)
+  alist:
+    image: xhofe/alist:v3.37.1
+    container_name: se-alist
+    restart: unless-stopped
+    profiles:
+      - optional
+    volumes:
+      - alist-data:/opt/alist/data
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.alist.rule=Host(`alist.local`)"
+      - "traefik.http.routers.alist.entrypoints=websecure"
+      - "traefik.http.routers.alist.tls=true"
+      - "traefik.http.services.alist.loadbalancer.server.port=5244"
+
+  # ============================================================
+  # Wave 8: Developer & CI/CD Tools (6 services)
+  # ============================================================
+
+  # 36. Gitea - Git Hosting (~60MB)
+  gitea:
+    image: gitea/gitea:1.22.1
+    container_name: se-gitea
+    restart: unless-stopped
+    profiles:
+      - devsecops
+      - shared-platform
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+    volumes:
+      - gitea-data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - solo-empire-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gitea.rule=Host(`gitea.local`)"
+      - "traefik.http.routers.gitea.entrypoints=websecure"
+      - "traefik.http.routers.gitea.tls=true"
+      - "traefik.http.services.gitea.loadbalancer.server.port=3000"
+
+  # 37. Woodpecker Server - CI/CD (~30MB)
+  woodpecker-server:
+    image: woodpeckerci/woodpecker-server:v2.7.0
+    container_name: se-woodpecker-server
+    restart: unless-stopped
+    profiles:
+      - devsecops
+      - shared-platform
+      - docker-control
+    volumes:
+      - woodpecker-data:/var/lib/woodpecker
+    environment:
+      - WOODPECKER_OPEN=true
+      - WOODPECKER_HOST=http://woodpecker.local
+      - WOODPECKER_GITEA=true
+      - WOODPECKER_GITEA_URL=http://se-gitea:3000
+      - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET}
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.woodpecker.rule=Host(`woodpecker.local`)"
+      - "traefik.http.routers.woodpecker.entrypoints=websecure"
+      - "traefik.http.routers.woodpecker.tls=true"
+      - "traefik.http.services.woodpecker.loadbalancer.server.port=8000"
+
+  # 38. Woodpecker Agent - CI Worker (~20MB)
+  woodpecker-agent:
+    image: woodpeckerci/woodpecker-agent:v2.7.0
+    container_name: se-woodpecker-agent
+    restart: unless-stopped
+    profiles:
+      - docker-control
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - WOODPECKER_SERVER=se-woodpecker-server:9000
+      - WOODPECKER_AGENT_SECRET=${WOODPECKER_AGENT_SECRET}
+    depends_on:
+      - woodpecker-server
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=false"
+
+  # 39. HttpBin - HTTP Testing (~10MB)
+  httpbin:
+    # Lab-only: unmaintained image; pin not available
+    image: kennethreitz/httpbin:latest
+    container_name: se-httpbin
+    restart: unless-stopped
+    profiles:
+      - optional
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.httpbin.rule=Host(`httpbin.local`)"
+      - "traefik.http.routers.httpbin.entrypoints=websecure"
+      - "traefik.http.routers.httpbin.tls=true"
+      - "traefik.http.services.httpbin.loadbalancer.server.port=80"
+
+  # 40. MockServer - API Mocking (~30MB)
+  mockserver:
+    image: mockserver/mockserver:5.15.0
+    container_name: se-mockserver
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - MOCKSERVER_LOG_LEVEL=INFO
+    volumes:
+      - mockserver-data:/config
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mockserver.rule=Host(`mockserver.local`)"
+      - "traefik.http.routers.mockserver.entrypoints=websecure"
+      - "traefik.http.routers.mockserver.tls=true"
+      - "traefik.http.services.mockserver.loadbalancer.server.port=1080"
+
+  # 41. Hoppscotch - API Development Platform (~30MB)
+  hoppscotch:
+    image: hoppscotch/hoppscotch:2024.7.1
+    container_name: se-hoppscotch
+    restart: "no"
+    profiles:
+      - disabled
+    environment:
+      - HOPPSCOTCH_APP_URL=http://hoppscotch.local
+      - HOPPSCOTCH_API_URL=http://hoppscotch.local
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@se-postgres:5432/hoppscotch?sslmode=disable
+      - JWT_SECRET=${HOPPSCOTCH_JWT_SECRET}
+      - SESSION_SECRET=${HOPPSCOTCH_SESSION_SECRET}
+      - GOOGLE_CLIENT_ID=x
+      - GOOGLE_CLIENT_SECRET=${HOPPSCOTCH_GOOGLE_CLIENT_SECRET}
+      - GOOGLE_CALLBACK_URL=http://hoppscotch.local/v1/auth/google/callback
+      - GITHUB_CLIENT_ID=x
+      - GITHUB_CLIENT_SECRET=${HOPPSCOTCH_GITHUB_CLIENT_SECRET}
+      - GITHUB_CALLBACK_URL=http://hoppscotch.local/v1/auth/github/callback
+      - WHITELISTED_ORIGINS=http://hoppscotch.local
+    depends_on:
+      - postgres
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hoppscotch.rule=Host(`hoppscotch.local`)"
+      - "traefik.http.routers.hoppscotch.entrypoints=websecure"
+      - "traefik.http.routers.hoppscotch.tls=true"
+      - "traefik.http.services.hoppscotch.loadbalancer.server.port=3000"
+
+  # ============================================================
+  # Wave 9: Networking (3 services)
+  # ============================================================
+
+  # 42. CoreDNS - DNS Server (~15MB)
+  # Resolves *.local domains to 127.0.0.1 for Traefik routing
+  coredns:
+    image: coredns/coredns:1.11.1
+    container_name: se-coredns
+    restart: unless-stopped
+    profiles:
+      - core
+      - shared-platform
+    # Host 5353 often conflicts with local DNS/mDNS; use 15353 for lab access
+    ports:
+      - "127.0.0.1:15353:53/udp"
+      - "127.0.0.1:15353:53/tcp"
+    volumes:
+      - ./coredns/Corefile:/Corefile:ro
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=false"
+
+  # 43. Caddy - Web Server (~15MB)
+  caddy:
+    image: caddy:2.8.4-alpine
+    container_name: se-caddy
+    restart: unless-stopped
+    profiles:
+      - optional
+    command: >
+      sh -c "echo ':80 {\n  respond \"Caddy is running\"\n}' > /etc/caddy/Caddyfile && caddy run --config /etc/caddy/Caddyfile"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/etc/caddy
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.caddy.rule=Host(`caddy.local`)"
+      - "traefik.http.routers.caddy.entrypoints=websecure"
+      - "traefik.http.routers.caddy.tls=true"
+      - "traefik.http.services.caddy.loadbalancer.server.port=80"
+
+  # 44. OAuth2 Proxy - Auth Proxy (~15MB)
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+    container_name: se-oauth2-proxy
+    restart: unless-stopped
+    profiles:
+      - devsecops
+      - shared-platform
+    environment:
+      - OAUTH2_PROXY_PROVIDER=github
+      - OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_PROXY_COOKIE_SECRET}
+      - OAUTH2_PROXY_CLIENT_ID=${OAUTH2_PROXY_CLIENT_ID}
+      - OAUTH2_PROXY_CLIENT_SECRET=${OAUTH2_PROXY_CLIENT_SECRET}
+      - OAUTH2_PROXY_EMAIL_DOMAINS=*
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.oauth2.rule=Host(`oauth2.local`)"
+      - "traefik.http.routers.oauth2.entrypoints=websecure"
+      - "traefik.http.routers.oauth2.tls=true"
+      - "traefik.http.services.oauth2.loadbalancer.server.port=4180"
+
+  # ============================================================
+  # Wave 10: Collaboration & Notes (4 services)
+  # ============================================================
+
+  # 45. Memos - Note Taking (~15MB)
+  memos:
+    image: ghcr.io/usememos/memos:0.22.0
+    container_name: se-memos
+    restart: unless-stopped
+    profiles:
+      - optional
+    volumes:
+      - memos-data:/var/opt/memos
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.memos.rule=Host(`memos.local`)"
+      - "traefik.http.routers.memos.entrypoints=websecure"
+      - "traefik.http.routers.memos.tls=true"
+      - "traefik.http.services.memos.loadbalancer.server.port=5230"
+
+  # 46. Excalidraw - Whiteboard (~30MB)
+  excalidraw:
+    # Lab-only: official image commonly ships :latest only
+    image: excalidraw/excalidraw:latest
+    container_name: se-excalidraw
+    restart: unless-stopped
+    profiles:
+      - optional
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.excalidraw.rule=Host(`excalidraw.local`)"
+      - "traefik.http.routers.excalidraw.entrypoints=websecure"
+      - "traefik.http.routers.excalidraw.tls=true"
+      - "traefik.http.services.excalidraw.loadbalancer.server.port=80"
+
+  # 47. CryptPad - Collaborative Editing (~40MB)
+  cryptpad:
+    image: cryptpad/cryptpad:2024.6.0
+    container_name: se-cryptpad
+    restart: "no"
+    profiles:
+      - disabled
+    volumes:
+      - cryptpad-data:/cryptpad
+    environment:
+      - CPAD_MAIN_DOMAIN=http://cryptpad.local
+      - CPAD_SANDBOX_DOMAIN=http://cryptpad.local
+      - CPAD_SECURE_ONLY=false
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.cryptpad.rule=Host(`cryptpad.local`)"
+      - "traefik.http.routers.cryptpad.entrypoints=websecure"
+      - "traefik.http.routers.cryptpad.tls=true"
+      - "traefik.http.services.cryptpad.loadbalancer.server.port=3000"
+
+  # 48. Joplin Server - Note Sync (~20MB)
+  joplin:
+    image: joplin/server:2.14.2
+    container_name: se-joplin
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - APP_BASE_URL=http://joplin.local
+      - APP_PORT=22300
+      - DB_CLIENT=sqlite3
+    volumes:
+      - joplin-data:/data
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.joplin.rule=Host(`joplin.local`)"
+      - "traefik.http.routers.joplin.entrypoints=websecure"
+      - "traefik.http.routers.joplin.tls=true"
+      - "traefik.http.services.joplin.loadbalancer.server.port=22300"
+
+  # ============================================================
+  # Wave 11: RSS & Content (2 services)
+  # ============================================================
+
+  # 49. Miniflux - RSS Reader (~15MB)
+  miniflux:
+    image: miniflux/miniflux:2.2.0
+    container_name: se-miniflux
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@se-postgres:5432/miniflux?sslmode=disable
+      - RUN_MIGRATIONS=1
+      - CREATE_ADMIN=1
+      - ADMIN_USERNAME=${MINIFLUX_ADMIN_USERNAME}
+      - ADMIN_PASSWORD=${MINIFLUX_ADMIN_PASSWORD}
+    depends_on:
+      - postgres
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.miniflux.rule=Host(`miniflux.local`)"
+      - "traefik.http.routers.miniflux.entrypoints=websecure"
+      - "traefik.http.routers.miniflux.tls=true"
+      - "traefik.http.services.miniflux.loadbalancer.server.port=8080"
+
+  # 50. Nitter - Twitter Frontend (~20MB)
+  nitter:
+    # Lab-only (profile: disabled): upstream tags are sparse
+    image: zedeus/nitter:latest
+    container_name: se-nitter
+    restart: "no"
+    profiles:
+      - disabled
+    volumes:
+      - nitter-data:/cache
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.nitter.rule=Host(`nitter.local`)"
+      - "traefik.http.routers.nitter.entrypoints=websecure"
+      - "traefik.http.routers.nitter.tls=true"
+      - "traefik.http.services.nitter.loadbalancer.server.port=8080"
+
+  # ============================================================
+  # Wave 12: Data & Analytics (6 services)
+  # ============================================================
+
+  # 51. InfluxDB - Time Series Database (~40MB)
+  influxdb:
+    image: influxdb:2.7.6-alpine
+    container_name: se-influxdb
+    restart: unless-stopped
+    profiles:
+      - data
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_ADMIN_USER}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_ADMIN_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ORG=solo-empire
+      - DOCKER_INFLUXDB_INIT_BUCKET=metrics
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.influxdb.rule=Host(`influxdb.local`)"
+      - "traefik.http.routers.influxdb.entrypoints=websecure"
+      - "traefik.http.routers.influxdb.tls=true"
+      - "traefik.http.services.influxdb.loadbalancer.server.port=8086"
+
+  # 52. Qdrant - Vector Database (~40MB)
+  qdrant:
+    image: qdrant/qdrant:v1.11.0
+    container_name: se-qdrant
+    restart: unless-stopped
+    profiles:
+      - data
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.qdrant.rule=Host(`qdrant.local`)"
+      - "traefik.http.routers.qdrant.entrypoints=websecure"
+      - "traefik.http.routers.qdrant.tls=true"
+      - "traefik.http.services.qdrant.loadbalancer.server.port=6333"
+
+  # 53. NATS - Lightweight Messaging (~10MB)
+  nats:
+    image: nats:2.10.18
+    container_name: se-nats
+    restart: unless-stopped
+    profiles:
+      - data
+    volumes:
+      - nats-data:/data
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=false"
+
+  # 53a. Redpanda - Kafka-compatible Event Streaming (optional lab profile)
+  # This is a single-broker development lab, not a production cluster.
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.2.1
+    container_name: se-redpanda
+    restart: unless-stopped
+    profiles:
+      - streaming
+    command:
+      - redpanda
+      - start
+      - --kafka-addr
+      - internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - internal://se-redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr
+      - internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr
+      - internal://se-redpanda:8082,external://localhost:18082
+      - --schema-registry-addr
+      - internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr
+      - se-redpanda:33145
+      - --advertise-rpc-addr
+      - se-redpanda:33145
+      - --mode
+      - dev-container
+      - --smp
+      - "1"
+      - --default-log-level=info
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    ports:
+      - "127.0.0.1:18081:18081"
+      - "127.0.0.1:18082:18082"
+      - "127.0.0.1:19092:19092"
+      - "127.0.0.1:19644:9644"
+    networks:
+      - solo-empire-net
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health --api-urls localhost:9644 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.10"
+          memory: 256M
+    labels:
+      - "traefik.enable=false"
+
+  # 53b. Redpanda topic bootstrap (optional streaming lab)
+  redpanda-topic-init:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.2.1
+    container_name: se-redpanda-topic-init
+    restart: "no"
+    profiles:
+      - streaming
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      STREAMING_TOPIC: ${STREAMING_TOPIC:-se.events}
+      STREAMING_RETENTION_MS: ${STREAMING_RETENTION_MS:-86400000}
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - |
+        for attempt in $$(seq 1 30); do
+          if rpk topic create -X brokers=se-redpanda:9092 --if-not-exists \
+            --partitions 1 --replicas 1 \
+            --topic-config cleanup.policy=delete \
+            --topic-config retention.ms="$${STREAMING_RETENTION_MS}" \
+            "$${STREAMING_TOPIC}"; then
+            break
+          fi
+          if [ "$${attempt}" -eq 30 ]; then
+            exit 1
+          fi
+          sleep 2
+        done
+        rpk topic alter-config -X brokers=se-redpanda:9092 "$${STREAMING_TOPIC}" \
+          --set retention.ms="$${STREAMING_RETENTION_MS}" \
+          --set cleanup.policy=delete \
+          --no-confirm
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=false"
+
+  # 53c. Kafka-compatible Avro sink worker
+  stream-sink:
+    <<: *data-lake-runtime
+    container_name: se-stream-sink
+    depends_on:
+      redpanda-topic-init:
+        condition: service_completed_successfully
+    environment:
+      DATA_LAKE_URI: file:///var/lib/solo-empire/lake
+      STREAMING_TOPIC: ${STREAMING_TOPIC:-se.events}
+      STREAMING_GROUP_ID: ${STREAMING_GROUP_ID:-solo-empire-lake-sink}
+      STREAMING_SOURCE: ${STREAMING_SOURCE:-synthetic}
+      STREAMING_DOMAIN: ${STREAMING_DOMAIN:-operations}
+      STREAMING_DATASET: ${STREAMING_DATASET:-events}
+      STREAMING_SCHEMA_VERSION: ${STREAMING_SCHEMA_VERSION:-1}
+      STREAMING_BATCH_SECONDS: ${STREAMING_BATCH_SECONDS:-60}
+      STREAMING_POLL_MS: ${STREAMING_POLL_MS:-5000}
+      STREAMING_MAX_RECORDS: ${STREAMING_MAX_RECORDS:-1000}
+      STREAMING_AUTO_OFFSET_RESET: ${STREAMING_AUTO_OFFSET_RESET:-earliest}
+    command:
+      - python
+      - /app/data_lake/stream_sink.py
+      - sink
+      - --bootstrap-servers
+      - se-redpanda:9092
+      - --topic
+      - ${STREAMING_TOPIC:-se.events}
+      - --group-id
+      - ${STREAMING_GROUP_ID:-solo-empire-lake-sink}
+      - --source
+      - ${STREAMING_SOURCE:-synthetic}
+      - --domain
+      - ${STREAMING_DOMAIN:-operations}
+      - --dataset
+      - ${STREAMING_DATASET:-events}
+      - --schema-version
+      - ${STREAMING_SCHEMA_VERSION:-1}
+      - --data-lake-uri
+      - file:///var/lib/solo-empire/lake
+      - --batch-seconds
+      - ${STREAMING_BATCH_SECONDS:-60}
+      - --poll-ms
+      - ${STREAMING_POLL_MS:-5000}
+      - --max-records
+      - ${STREAMING_MAX_RECORDS:-1000}
+      - --auto-offset-reset
+      - ${STREAMING_AUTO_OFFSET_RESET:-earliest}
+      - --status-file
+      - /var/lib/solo-empire/state/stream-sink.json
+    healthcheck:
+      test: ["CMD", "python", "/app/data_lake/stream_sink.py", "status", "--status-file", "/var/lib/solo-empire/state/stream-sink.json", "--max-age-seconds", "180"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # 53d. Avro to Bronze Parquet and optional Iceberg converter worker
+  stream-converter:
+    <<: *data-lake-runtime
+    container_name: se-stream-converter
+    depends_on:
+      redpanda-topic-init:
+        condition: service_completed_successfully
+    environment:
+      DATA_LAKE_URI: file:///var/lib/solo-empire/lake
+      STREAMING_CONVERTER_INTERVAL_SECONDS: ${STREAMING_CONVERTER_INTERVAL_SECONDS:-60}
+      ICEBERG_CATALOG_URI: ${ICEBERG_CATALOG_URI:-sqlite:////var/lib/solo-empire/lake/catalog.db}
+      ICEBERG_WAREHOUSE_URI: ${ICEBERG_WAREHOUSE_URI:-file:///var/lib/solo-empire/lake}
+    command:
+      - python
+      - /app/data_lake/stream_sink.py
+      - convert
+      - --watch
+      - --poll-seconds
+      - ${STREAMING_CONVERTER_INTERVAL_SECONDS:-60}
+      - --data-lake-uri
+      - file:///var/lib/solo-empire/lake
+      - --iceberg-catalog-uri
+      - ${ICEBERG_CATALOG_URI:-sqlite:////var/lib/solo-empire/lake/catalog.db}
+      - --iceberg-warehouse-uri
+      - ${ICEBERG_WAREHOUSE_URI:-file:///var/lib/solo-empire/lake}
+      - --status-file
+      - /var/lib/solo-empire/state/stream-converter.json
+    healthcheck:
+      test: ["CMD", "python", "/app/data_lake/stream_sink.py", "status", "--status-file", "/var/lib/solo-empire/state/stream-converter.json", "--max-age-seconds", "180"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # 54. Mosquitto - MQTT Broker (~10MB)
+  mosquitto:
+    image: eclipse-mosquitto:2.0.18
+    container_name: se-mosquitto
+    restart: unless-stopped
+    profiles:
+      - data
+    volumes:
+      - mosquitto-data:/mosquitto/config
+      - mosquitto-data:/mosquitto/data
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=false"
+
+  # 55. PostgREST - REST API from DB (~10MB)
+  postgrest:
+    image: postgrest/postgrest:v12.2.3
+    container_name: se-postgrest
+    restart: unless-stopped
+    profiles:
+      - data
+    environment:
+      - PGRST_DB_URI=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@se-postgres:5432/${POSTGRES_DB}?sslmode=disable
+      - PGRST_DB_SCHEMA=public
+      - PGRST_DB_ANON_ROLE=${POSTGRES_USER}
+    depends_on:
+      - postgres
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.postgrest.rule=Host(`postgrest.local`)"
+      - "traefik.http.routers.postgrest.entrypoints=websecure"
+      - "traefik.http.routers.postgrest.tls=true"
+      - "traefik.http.services.postgrest.loadbalancer.server.port=3000"
+
+  # ============================================================
+  # Wave 13: AI & Translation (3 services)
+  # ============================================================
+
+  # 57. LibreTranslate - Translation API (~50MB)
+  libretranslate:
+    image: libretranslate/libretranslate:v1.6.0
+    container_name: se-libretranslate
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - LT_HOST=0.0.0.0
+    volumes:
+      - libretranslate-data:/home/libretranslate/.local
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.libretranslate.rule=Host(`translate.local`)"
+      - "traefik.http.routers.libretranslate.entrypoints=websecure"
+      - "traefik.http.routers.libretranslate.tls=true"
+      - "traefik.http.services.libretranslate.loadbalancer.server.port=5000"
+
+  # 58. LobeChat - AI Chat Interface (~40MB)
+  lobechat:
+    image: lobehub/lobe-chat:1.19.30
+    container_name: se-lobechat
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - lobechat-data:/app/data
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.lobechat.rule=Host(`lobechat.local`)"
+      - "traefik.http.routers.lobechat.entrypoints=websecure"
+      - "traefik.http.routers.lobechat.tls=true"
+      - "traefik.http.services.lobechat.loadbalancer.server.port=3210"
+
+  # 59. BreezeWiki - Fandom Frontend (~15MB)
+  breezewiki:
+    # Lab-only (profile: disabled): upstream tags are sparse
+    image: fariszr/breezewiki:latest
+    container_name: se-breezewiki
+    restart: "no"
+    profiles:
+      - disabled
+    environment:
+      - BW_PORT=8000
+      - BW_HOST=0.0.0.0
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.breezewiki.rule=Host(`breezewiki.local`)"
+      - "traefik.http.routers.breezewiki.entrypoints=websecure"
+      - "traefik.http.routers.breezewiki.tls=true"
+      - "traefik.http.services.breezewiki.loadbalancer.server.port=8000"
+
+  # ============================================================
+  # Wave 14: Publishing & Blogging (3 services)
+  # ============================================================
+
+  # 60. Ghost - Publishing Platform (~100MB)
+  ghost:
+    image: ghost:5.89.5-alpine
+    container_name: se-ghost
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - url=http://ghost.local
+      - database__client=sqlite3
+      - database__connection__filename=/var/lib/ghost/content/data/ghost.db
+    volumes:
+      - ghost-data:/var/lib/ghost/content
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ghost.rule=Host(`ghost.local`)"
+      - "traefik.http.routers.ghost.entrypoints=websecure"
+      - "traefik.http.routers.ghost.tls=true"
+      - "traefik.http.services.ghost.loadbalancer.server.port=2368"
+
+  # 61. BookStack - Wiki/Knowledge Base (~50MB)
+  bookstack-db:
+    image: mariadb:11.4.2
+    container_name: se-bookstack-db
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - MARIADB_ROOT_PASSWORD=${BOOKSTACK_MARIADB_ROOT_PASSWORD}
+      - MARIADB_DATABASE=bookstack
+      - MARIADB_USER=${BOOKSTACK_DB_USER}
+      - MARIADB_PASSWORD=${BOOKSTACK_DB_PASSWORD}
+    volumes:
+      - bookstack-db-data:/var/lib/mysql
+    networks:
+      - solo-empire-net
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--mariadbupgrade"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  bookstack:
+    image: linuxserver/bookstack:24.05.2
+    container_name: se-bookstack
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - APP_URL=https://bookstack.local
+      - APP_KEY=${BOOKSTACK_APP_KEY}
+      - DB_HOST=se-bookstack-db
+      - DB_PORT=3306
+      - DB_USER=${BOOKSTACK_DB_USER}
+      - DB_PASS=${BOOKSTACK_DB_PASSWORD}
+      - DB_DATABASE=bookstack
+    volumes:
+      - bookstack-data:/config
+    depends_on:
+      bookstack-db:
+        condition: service_healthy
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.bookstack.rule=Host(`bookstack.local`)"
+      - "traefik.http.routers.bookstack.entrypoints=websecure"
+      - "traefik.http.routers.bookstack.tls=true"
+      - "traefik.http.services.bookstack.loadbalancer.server.port=80"
+
+  # ============================================================
+  # Wave 15: Dashboards (1 service)
+  # ============================================================
+
+  # 62. Homer - Dashboard (~10MB)
+  homer:
+    image: b4bz/homer:v24.05.1
+    container_name: se-homer
+    restart: unless-stopped
+    profiles:
+      - core
+      - shared-platform
+    volumes:
+      - ./homer:/www/assets
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.homer.rule=Host(`homer.local`)"
+      - "traefik.http.routers.homer.entrypoints=websecure"
+      - "traefik.http.routers.homer.tls=true"
+      - "traefik.http.services.homer.loadbalancer.server.port=8080"
+
+  # ============================================================
+  # Wave 16: Advanced Monitoring (5 services)
+  # ============================================================
+
+  # 63. Tempo - Distributed Tracing (~30MB)
+  tempo:
+    image: grafana/tempo:2.5.0
+    container_name: se-tempo
+    restart: unless-stopped
+    profiles:
+      - observability
+      - shared-platform
+    command: -config.file=/etc/tempo.yml
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo.yml:ro
+      - tempo-data:/tmp/tempo
+    ports:
+      # OTLP receivers, bound to loopback only — matches infra/api/telemetry.ts's
+      # default OTEL_EXPORTER_OTLP_ENDPOINT (http://localhost:4318/v1/traces)
+      # for a host-run (non-Compose) API process.
+      - "127.0.0.1:4318:4318" # OTLP/HTTP
+      - "127.0.0.1:4317:4317" # OTLP/gRPC
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3200/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tempo.rule=Host(`tempo.local`)"
+      - "traefik.http.routers.tempo.entrypoints=websecure"
+      - "traefik.http.routers.tempo.tls=true"
+      - "traefik.http.services.tempo.loadbalancer.server.port=3200"
+
+  # 64. Pushgateway - Prometheus Push Metrics (~10MB)
+  pushgateway:
+    image: prom/pushgateway:v1.7.0
+    container_name: se-pushgateway
+    restart: unless-stopped
+    profiles:
+      - observability
+      - shared-platform
+    volumes:
+      - pushgateway-data:/data
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pushgateway.rule=Host(`pushgateway.local`)"
+      - "traefik.http.routers.pushgateway.entrypoints=websecure"
+      - "traefik.http.routers.pushgateway.tls=true"
+      - "traefik.http.services.pushgateway.loadbalancer.server.port=9091"
+
+  # 65. Blackbox Exporter - Probe Monitoring (~10MB)
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.24.0
+    container_name: se-blackbox-exporter
+    restart: unless-stopped
+    profiles:
+      - observability
+      - shared-platform
+    volumes:
+      - blackbox-data:/config
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=false"
+
+  # 66. Graphite - Metrics Storage (~40MB)
+  graphite:
+    image: graphiteapp/graphite-statsd:1.1.10-5
+    container_name: se-graphite
+    restart: unless-stopped
+    profiles:
+      - observability
+      - shared-platform
+    volumes:
+      - graphite-data:/opt/graphite/storage
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.graphite.rule=Host(`graphite.local`)"
+      - "traefik.http.routers.graphite.entrypoints=websecure"
+      - "traefik.http.routers.graphite.tls=true"
+      - "traefik.http.services.graphite.loadbalancer.server.port=80"
+
+  # 67. Umami - Web Analytics (~40MB)
+  umami:
+    image: ghcr.io/umami-software/umami:postgresql-v2.12.0
+    container_name: se-umami
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - HASH_SALT=${UMAMI_HASH_SALT}
+      - NEXTAUTH_SECRET=${UMAMI_NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=https://umami.local
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@se-postgres:5432/umami?sslmode=disable
+    depends_on:
+      - postgres
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.umami.rule=Host(`umami.local`)"
+      - "traefik.http.routers.umami.entrypoints=websecure"
+      - "traefik.http.routers.umami.tls=true"
+      - "traefik.http.services.umami.loadbalancer.server.port=3000"
+
+  # ============================================================
+  # Wave 17: Media & File Utilities (2 services)
+  # ============================================================
+
+  # 68. imgproxy - Image Processing (~20MB)
+  imgproxy:
+    image: darthsim/imgproxy:v3.24.1
+    container_name: se-imgproxy
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - IMGPROXY_KEY=${IMGPROXY_KEY}
+      - IMGPROXY_SALT=${IMGPROXY_SALT}
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.imgproxy.rule=Host(`imgproxy.local`)"
+      - "traefik.http.routers.imgproxy.entrypoints=websecure"
+      - "traefik.http.routers.imgproxy.tls=true"
+      - "traefik.http.services.imgproxy.loadbalancer.server.port=8080"
+
+  # 69. MinIO - S3-Compatible Storage (~80MB)
+  minio:
+    image: minio/minio:RELEASE.2024-08-03T04-33-23Z
+    container_name: se-minio
+    restart: unless-stopped
+    profiles:
+      - data
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.minio.rule=Host(`minio.local`)"
+      - "traefik.http.routers.minio.entrypoints=websecure"
+      - "traefik.http.routers.minio.tls=true"
+      - "traefik.http.services.minio.loadbalancer.server.port=9001"
+
+  # ============================================================
+  # Wave 18: Knowledge & Q&A (2 services)
+  # ============================================================
+
+  # 70. Answer - Q&A Platform (~30MB)
+  answer:
+    image: apache/answer:1.3.5
+    container_name: se-answer
+    restart: unless-stopped
+    profiles:
+      - optional
+    volumes:
+      - answer-data:/data
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.answer.rule=Host(`answer.local`)"
+      - "traefik.http.routers.answer.entrypoints=websecure"
+      - "traefik.http.routers.answer.tls=true"
+      - "traefik.http.services.answer.loadbalancer.server.port=80"
+
+  # 71. Outline - Team Wiki/Knowledge Base (~50MB)
+  outline:
+    image: outlinewiki/outline:0.78.0
+    container_name: se-outline
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - NODE_ENV=production
+      - URL=http://outline.local
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@se-postgres:5432/outline?sslmode=disable
+      - REDIS_URL=redis://se-valkey:6379
+      - SECRET_KEY=${OUTLINE_SECRET_KEY}
+      - UTILS_SECRET=${OUTLINE_UTILS_SECRET}
+    depends_on:
+      - postgres
+      - valkey
+    volumes:
+      - outline-data:/var/lib/outline/data
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.outline.rule=Host(`outline.local`)"
+      - "traefik.http.routers.outline.entrypoints=websecure"
+      - "traefik.http.routers.outline.tls=true"
+      - "traefik.http.services.outline.loadbalancer.server.port=3000"
+
+  # ============================================================
+  # Wave 19: Finance & Utilities (4 services)
+  # ============================================================
+
+  # 72. Firefly III - Personal Finance (~50MB)
+  firefly:
+    image: fireflyiii/core:version-6.1.17
+    container_name: se-firefly
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - APP_KEY=${FIREFLY_APP_KEY}
+      - DB_CONNECTION=pgsql
+      - DB_HOST=se-postgres
+      - DB_PORT=5432
+      - DB_DATABASE=firefly
+      - DB_USERNAME=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+    depends_on:
+      - postgres
+    volumes:
+      - firefly-data:/var/www/html/storage/upload
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.firefly.rule=Host(`firefly.local`)"
+      - "traefik.http.routers.firefly.entrypoints=websecure"
+      - "traefik.http.routers.firefly.tls=true"
+      - "traefik.http.services.firefly.loadbalancer.server.port=8080"
+
+  # 73. Metabase - Business Intelligence (~80MB)
+  metabase:
+    image: metabase/metabase:v0.50.15
+    container_name: se-metabase
+    restart: unless-stopped
+    profiles:
+      - data
+    volumes:
+      - metabase-data:/metabase.db
+    environment:
+      - MB_DB_TYPE=h2
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.metabase.rule=Host(`metabase.local`)"
+      - "traefik.http.routers.metabase.entrypoints=websecure"
+      - "traefik.http.routers.metabase.tls=true"
+      - "traefik.http.services.metabase.loadbalancer.server.port=3000"
+
+  # 74. Redis Commander - Redis GUI (~20MB)
+  redis-commander:
+    image: rediscommander/redis-commander:0.8.1
+    container_name: se-redis-commander
+    restart: unless-stopped
+    profiles:
+      - optional
+    environment:
+      - REDIS_HOSTS=local:se-valkey:6379
+    depends_on:
+      - valkey
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.redis.rule=Host(`redis.local`)"
+      - "traefik.http.routers.redis.entrypoints=websecure"
+      - "traefik.http.routers.redis.tls=true"
+      - "traefik.http.services.redis.loadbalancer.server.port=8081"
+
+  # 75. Sharry - File Sharing (~40MB)
+  sharry:
+    image: eikek0/sharry:1.14.0
+    container_name: se-sharry
+    restart: unless-stopped
+    profiles:
+      - optional
+    volumes:
+      - sharry-data:/var/lib/sharry
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sharry.rule=Host(`sharry.local`)"
+      - "traefik.http.routers.sharry.entrypoints=websecure"
+      - "traefik.http.routers.sharry.tls=true"
+      - "traefik.http.services.sharry.loadbalancer.server.port=9090"
+
+  # ============================================================
+  # Wave 20: Specialized Tools (6 services)
+  # ============================================================
+
+  # 76. SpiceDB - Authorization Database (~25MB)
+  spicedb:
+    image: authzed/spicedb:v1.34.0
+    container_name: se-spicedb
+    restart: unless-stopped
+    profiles:
+      - devsecops
+      - shared-platform
+    command: serve --grpc-preshared-key ${SPICEDB_GRPC_PRESHARED_KEY} --http-enabled --http-addr=:8443 --datastore-engine=memory
+    volumes:
+      - spicedb-data:/data
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.spicedb.rule=Host(`spicedb.local`)"
+      - "traefik.http.routers.spicedb.entrypoints=websecure"
+      - "traefik.http.routers.spicedb.tls=true"
+      - "traefik.http.services.spicedb.loadbalancer.server.port=8443"
+
+  # 77. Kestra - Workflow Orchestration (~60MB)
+  kestra:
+    image: kestra/kestra:v0.18.0
+    container_name: se-kestra
+    restart: unless-stopped
+    profiles:
+      - data
+    # Lab: Postgres repository/queue + local file storage (not production HA).
+    # The Docker task runner requires direct host control; keep `data` local-only.
+    user: "root"
+    command: server standalone --worker-thread=4
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - kestra-data:/app/storage
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      KESTRA_CONFIGURATION: |
+        datasources:
+          postgres:
+            url: jdbc:postgresql://se-postgres:5432/kestra
+            driverClassName: org.postgresql.Driver
+            username: ${POSTGRES_USER}
+            password: ${POSTGRES_PASSWORD}
+        kestra:
+          server:
+            basic-auth:
+              enabled: false
+          repository:
+            type: postgres
+          queue:
+            type: postgres
+          storage:
+            type: local
+            local:
+              base-path: "/app/storage"
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kestra.rule=Host(`kestra.local`)"
+      - "traefik.http.routers.kestra.entrypoints=websecure"
+      - "traefik.http.routers.kestra.tls=true"
+      - "traefik.http.services.kestra.loadbalancer.server.port=8080"
+
+  # 78. Traccar - GPS Tracking (~40MB)
+  traccar:
+    image: traccar/traccar:6.3
+    container_name: se-traccar
+    restart: unless-stopped
+    profiles:
+      - optional
+    volumes:
+      - traccar-data:/opt/traccar
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traccar.rule=Host(`traccar.local`)"
+      - "traefik.http.routers.traccar.entrypoints=websecure"
+      - "traefik.http.routers.traccar.tls=true"
+      - "traefik.http.services.traccar.loadbalancer.server.port=8082"
+
+  # 79. Tyk - API Gateway (~50MB)
+  tyk:
+    image: tykio/tyk-gateway:v5.4.0
+    container_name: se-tyk
+    restart: unless-stopped
+    profiles:
+      - devsecops
+    volumes:
+      - tyk-data:/opt/tyk-gateway
+    environment:
+      - TYK_GW_SECRET=${TYK_GW_SECRET}
+      - TYK_GW_LISTENPORT=8080
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tyk.rule=Host(`tyk.local`)"
+      - "traefik.http.routers.tyk.entrypoints=websecure"
+      - "traefik.http.routers.tyk.tls=true"
+      - "traefik.http.services.tyk.loadbalancer.server.port=8080"
+
+  # 80. JSON Schema Store - Schema Validator (~10MB)
+  jsonschema:
+    image: python:3.11-slim
+    container_name: se-jsonschema
+    restart: unless-stopped
+    profiles:
+      - optional
+    working_dir: /data
+    volumes:
+      - ./jsonschema:/data
+    command: >
+      bash -c "pip install --no-cache-dir jsonschema &&
+      echo 'JSON Schema validator ready.' &&
+      tail -f /dev/null"
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=false"
+
+  # 81. Squid - Proxy Cache (~20MB)
+  squid:
+    image: ubuntu/squid:6.6-24.04_beta
+    container_name: se-squid
+    restart: unless-stopped
+    profiles:
+      - optional
+    volumes:
+      - squid-data:/etc/squid
+      - squid-data:/var/spool/squid
+    networks:
+      - solo-empire-net
+    labels:
+      - "traefik.enable=false"

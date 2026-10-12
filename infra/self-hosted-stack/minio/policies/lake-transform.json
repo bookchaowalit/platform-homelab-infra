@@ -1,0 +1,54 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LakeTransformReadInputs",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::solo-empire-portfolio/lake/bronze/*",
+        "arn:aws:s3:::solo-empire-portfolio/lake/control/checkpoints/*",
+        "arn:aws:s3:::solo-empire-portfolio/lake/control/manifests/source=*",
+        "arn:aws:s3:::solo-empire-portfolio/lake/control/manifests/stream/*",
+        "arn:aws:s3:::solo-empire-portfolio/lake/control/manifests/stream-parquet/*",
+        "arn:aws:s3:::solo-empire-portfolio/lake/silver/*",
+        "arn:aws:s3:::solo-empire-portfolio/lake/gold/*"
+      ]
+    },
+    {
+      "Sid": "LakeTransformListInputsAndOutputs",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::solo-empire-portfolio",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "lake/bronze/*",
+            "lake/control/checkpoints/*",
+            "lake/control/manifests/*",
+            "lake/silver/*",
+            "lake/gold/*"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "LakeTransformImmutableOutputs",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::solo-empire-portfolio/lake/silver/*",
+        "arn:aws:s3:::solo-empire-portfolio/lake/gold/*",
+        "arn:aws:s3:::solo-empire-portfolio/lake/control/manifests/silver/*",
+        "arn:aws:s3:::solo-empire-portfolio/lake/control/manifests/derived/*"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "title": "Services Up",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "count(up == 1)", "legendFormat": "Up" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 50 }] } } }
+    },
+    {
+      "title": "Services Down",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [{ "expr": "count(up == 0) OR vector(0)", "legendFormat": "Down" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } }
+    },
+    {
+      "title": "CPU Usage",
+      "type": "gauge",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [{ "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)", "legendFormat": "CPU %" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 60 }, { "color": "red", "value": 85 }] } } }
+    },
+    {
+      "title": "Memory Usage",
+      "type": "gauge",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [{ "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100", "legendFormat": "Memory %" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 60 }, { "color": "red", "value": 85 }] } } }
+    },
+    {
+      "title": "Service Health",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [{ "expr": "up", "format": "table", "instant": true }],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "instance": false }, "indexByName": {}, "renameByName": { "instance": "Instance", "job": "Service", "Value": "Status" } } }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "align": "center" } }, "overrides": [{ "matcher": { "id": "byName", "options": "Status" }, "properties": [{ "id": "mappings", "value": [{ "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }] }] }] }
+    },
+    {
+      "title": "Disk Usage by Mount",
+      "type": "bargauge",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [{ "expr": "(1 - (node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay\"})) * 100", "legendFormat": "{{ mountpoint }}" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 60 }, { "color": "red", "value": 85 }] } } }
+    },
+    {
+      "title": "Network I/O",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        { "expr": "rate(node_network_receive_bytes_total{device!~\"lo|veth.*|br.*|docker.*\"}[5m])", "legendFormat": "↓ {{ device }}" },
+        { "expr": "rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|br.*|docker.*\"}[5m])", "legendFormat": "↑ {{ device }}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Bps", "custom": { "fillOpacity": 20 } } }
+    },
+    {
+      "title": "Traefik Requests/s",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        { "expr": "sum(rate(traefik_service_requests_total[5m])) by (service)", "legendFormat": "{{ service }}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 20 } } }
+    },
+    {
+      "title": "Traefik Error Rate (5xx)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [
+        { "expr": "sum(rate(traefik_service_requests_total{code=~\"5..\"}[5m])) by (service)", "legendFormat": "{{ service }}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 20 }, "color": { "mode": "palette-classic" } } }
+    },
+    {
+      "title": "Active Alerts",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 28 },
+      "targets": [{ "expr": "ALERTS{alertstate=\"firing\"}", "legendFormat": "{{ alertname }}" }],
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["solo-empire", "infrastructure"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "Solo Empire - Service Overview",
+  "uid": "solo-empire-overview",
+  "version": 1
+}

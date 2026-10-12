@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LakeIngestImmutableObjects",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::solo-empire-portfolio/lake/landing/*",
+        "arn:aws:s3:::solo-empire-portfolio/lake/bronze/*",
+        "arn:aws:s3:::solo-empire-portfolio/lake/control/checkpoints/*",
+        "arn:aws:s3:::solo-empire-portfolio/lake/control/manifests/source=*",
+        "arn:aws:s3:::solo-empire-portfolio/lake/control/manifests/stream/*",
+        "arn:aws:s3:::solo-empire-portfolio/lake/control/manifests/stream-parquet/*",
+        "arn:aws:s3:::solo-empire-portfolio/lake/control/quarantine/*"
+      ]
+    }
+  ]
+}
