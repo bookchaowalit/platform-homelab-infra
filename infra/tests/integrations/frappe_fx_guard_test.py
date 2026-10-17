@@ -1,12 +1,12 @@
 """Offline boundary tests for the proposed Frappe before-submit hook."""
 
 import importlib.util
-from pathlib import Path
 import sys
-from types import SimpleNamespace
 import unittest
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
-from datetime import datetime, timedelta, timezone
 
 spec = importlib.util.spec_from_file_location(
     "frappe_fx_guard",
@@ -18,19 +18,19 @@ spec.loader.exec_module(guard)
 
 class GuardTests(unittest.TestCase):
     def setUp(self):
-        self.now = datetime(2026, 9, 8, 12, tzinfo=timezone.utc)
-        self.row = dict(
-            base_currency="USD",
-            quote_currency="THB",
-            rate="35.125",
-            quality="verified",
-            source_type="reference",
-            source_ref="fixture",
-            reviewed_by="fixture-reviewer",
-            as_of="2026-09-08T11:00:00Z",
-            captured_at="2026-09-08T11:01:00Z",
-            reviewed_at="2026-09-08T11:02:00Z",
-        )
+        self.now = datetime(2026, 9, 8, 12, tzinfo=UTC)
+        self.row = {
+            "base_currency": "USD",
+            "quote_currency": "THB",
+            "rate": "35.125",
+            "quality": "verified",
+            "source_type": "reference",
+            "source_ref": "fixture",
+            "reviewed_by": "fixture-reviewer",
+            "as_of": "2026-09-08T11:00:00Z",
+            "captured_at": "2026-09-08T11:01:00Z",
+            "reviewed_at": "2026-09-08T11:02:00Z",
+        }
 
     def check(self, row=None, rate="35.125"):
         guard.validate_observation(
@@ -106,7 +106,7 @@ class GuardTests(unittest.TestCase):
             )
 
     def test_adapter_uses_trusted_snapshot_and_server_clock(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         row = {
             **self.row,
             **{

@@ -7,7 +7,6 @@ import json
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 PROMETHEUS_CONFIG = ROOT / "self-hosted-stack/prometheus/prometheus.yml"
 PROMETHEUS_TARGETS = ROOT / "self-hosted-stack/prometheus/mlops-targets.json"

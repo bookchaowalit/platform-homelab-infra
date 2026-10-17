@@ -24,7 +24,6 @@ from http.cookiejar import CookieJar
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[3]
 FRAPPE_DIR = ROOT / "infra" / "self-hosted-stack" / "frappe"
 DEFAULT_ADMIN_CREDENTIALS = FRAPPE_DIR / ".runtime" / "credentials.txt"

@@ -1,6 +1,6 @@
 """Trusted, provider-free FX validation for Sales Invoice before_submit."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 
@@ -12,7 +12,7 @@ def timestamp(value):
     try:
         if not isinstance(value, str) or not value.endswith("Z"):
             raise ValueError
-        return datetime.fromisoformat(value[:-1] + "+00:00")
+        return datetime.fromisoformat(value[:-1] + "+00:00")  # noqa: FURB162 - keep the explicit "Z" handling; lint pass is behaviour-neutral
     except (TypeError, ValueError):
         raise FXRejected("FX_TIME_ALIGNMENT_INVALID") from None
 
@@ -91,7 +91,7 @@ def validate_sales_invoice(doc, method=None):
             company_currency=company_currency,
             rate=doc.conversion_rate,
             observation=observation,
-            now=datetime.now(timezone.utc),
+            now=datetime.now(UTC),
         )
     except FXRejected as exc:
         frappe.throw(str(exc))

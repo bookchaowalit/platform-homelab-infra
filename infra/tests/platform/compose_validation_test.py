@@ -14,7 +14,6 @@ Checks:
 
 from __future__ import annotations
 
-import argparse
 import re
 import sys
 from pathlib import Path
@@ -24,8 +23,7 @@ PLATFORM_SCRIPTS = ROOT / "infra" / "scripts" / "platform"
 if str(PLATFORM_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PLATFORM_SCRIPTS))
 
-from platform_output import configure_utf8_stdio  # noqa: E402
-
+from platform_output import configure_utf8_stdio
 
 PLATFORM = ROOT / "infra" / "platform"
 OPS_PLATFORM = ROOT / "operations" / "platform"
@@ -39,14 +37,14 @@ GITOPS = PLATFORM / "gitops"
 
 # Patterns that indicate committed secrets in production-target paths
 SECRET_PATTERNS = [
-    re.compile(r"soloempire2026", re.I),
+    re.compile(r"soloempire2026", re.IGNORECASE),
     re.compile(
         r"password\s*[:=]\s*['\"]?(?!change-me|changeme|\$\{|<.*>|your-|placeholder|example)[^\s'\"]{8,}",
-        re.I,
+        re.IGNORECASE,
     ),
     re.compile(
         r"(api[_-]?key|secret[_-]?key|private[_-]?key)\s*[:=]\s*['\"][A-Za-z0-9/+=]{16,}['\"]",
-        re.I,
+        re.IGNORECASE,
     ),
     re.compile(r"AKIA[0-9A-Z]{16}"),
     re.compile(r"ghp_[A-Za-z0-9]{20,}"),
@@ -56,7 +54,7 @@ SECRET_PATTERNS = [
 # Match image references ending in :latest, but not policy patterns like "!*:latest"
 LATEST_IMAGE = re.compile(
     r"""(?:image:\s*|repository:\s*)['"]?([A-Za-z0-9._\-]+(?:/[A-Za-z0-9._\-]+)*:latest)['"]?""",
-    re.I,
+    re.IGNORECASE,
 )
 
 # Known lab-only :latest exceptions (annotated in compose; not production targets)
@@ -235,7 +233,7 @@ def test_compose_security(c: Checker) -> None:
         for name, profile in profile_expectations.items()
         if name in service_blocks
         and not re.search(
-            rf"^\s+- {re.escape(profile)}\s*$", service_blocks[name], re.M
+            rf"^\s+- {re.escape(profile)}\s*$", service_blocks[name], re.MULTILINE
         )
     ]
     if profile_failures:

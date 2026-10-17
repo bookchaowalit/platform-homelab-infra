@@ -1,4 +1,4 @@
-from . import __version__ as app_version
+from . import __version__ as app_version  # noqa: F401 - Frappe reads app_version from the hooks module
 
 app_name = "solo_empire_fx_guard"
 app_title = "Solo Empire FX Guard"

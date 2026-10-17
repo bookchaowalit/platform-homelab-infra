@@ -8,7 +8,6 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[3]
 POLICY_DIR = ROOT / "infra" / "self-hosted-stack" / "minio" / "policies"
 POLICIES = {
@@ -24,14 +23,14 @@ OBJECT_ARN = BUCKET_ARN + "/lake/"
 def load_policy(name: str) -> dict[str, Any]:
     payload = json.loads(POLICIES[name].read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise AssertionError(f"{name} policy must be an object")
+        raise AssertionError(f"{name} policy must be an object")  # noqa: TRY004 - a test assertion, not a type error
     return payload
 
 
 def statements(policy: dict[str, Any]) -> list[dict[str, Any]]:
     value = policy.get("Statement")
     if not isinstance(value, list):
-        raise AssertionError("policy Statement must be a list")
+        raise AssertionError("policy Statement must be a list")  # noqa: TRY004 - a test assertion, not a type error
     return value
 
 

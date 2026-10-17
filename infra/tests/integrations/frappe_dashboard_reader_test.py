@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "infra" / "scripts" / "sync"))
 
-from frappe_dashboard_reader import read_key_value_file, write_token_file  # noqa: E402
+from frappe_dashboard_reader import read_key_value_file, write_token_file
 
 
 def test_token_file_is_minimal_and_private() -> None:
