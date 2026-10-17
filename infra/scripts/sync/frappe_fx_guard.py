@@ -4,7 +4,9 @@ from pathlib import Path
 import sys
 
 
-_APP_ROOT = Path(__file__).resolve().parents[2] / "self-hosted-stack" / "frappe" / "custom-apps"
+_APP_ROOT = (
+    Path(__file__).resolve().parents[2] / "self-hosted-stack" / "frappe" / "custom-apps"
+)
 sys.path.insert(0, str(_APP_ROOT))
 
 from solo_empire_fx_guard.solo_empire_fx_guard.fx_guard import (  # noqa: E402
@@ -15,4 +17,10 @@ from solo_empire_fx_guard.solo_empire_fx_guard.fx_guard import (  # noqa: E402
     validate_sales_invoice,
 )
 
-__all__ = ["FXRejected", "amount", "timestamp", "validate_observation", "validate_sales_invoice"]
+__all__ = [
+    "FXRejected",
+    "amount",
+    "timestamp",
+    "validate_observation",
+    "validate_sales_invoice",
+]

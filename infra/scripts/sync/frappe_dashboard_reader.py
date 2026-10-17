@@ -64,7 +64,13 @@ def read_key_value_file(path: Path) -> dict[str, str]:
         key, separator, value = raw.partition("=")
         if not separator:
             key, separator, value = raw.partition(":")
-        if separator and key.strip() in {"site_name", "admin_user", "admin_password", "api_key", "api_secret"}:
+        if separator and key.strip() in {
+            "site_name",
+            "admin_user",
+            "admin_password",
+            "api_key",
+            "api_secret",
+        }:
             values[key.strip()] = value.strip()
     return values
 
@@ -84,7 +90,9 @@ class FrappeAdminClient:
         self.user = user
         self.password = password
         self.cookies = CookieJar()
-        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookies))
+        self.opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(self.cookies)
+        )
 
     def login(self) -> None:
         self.request(
@@ -139,7 +147,10 @@ class FrappeAdminClient:
 
     def get(self, doctype: str, name: str) -> dict[str, Any] | None:
         try:
-            body = self.request("GET", f"/api/resource/{urllib.parse.quote(doctype, safe='')}/{urllib.parse.quote(name, safe='')}")
+            body = self.request(
+                "GET",
+                f"/api/resource/{urllib.parse.quote(doctype, safe='')}/{urllib.parse.quote(name, safe='')}",
+            )
         except FrappeRequestError as exc:
             if exc.status == 404:
                 return None
@@ -161,12 +172,21 @@ class FrappeAdminClient:
         }
         if filters:
             query["filters"] = json.dumps(filters)
-        body = self.request("GET", f"/api/resource/{urllib.parse.quote(doctype, safe='')}", query=query, token=token)
+        body = self.request(
+            "GET",
+            f"/api/resource/{urllib.parse.quote(doctype, safe='')}",
+            query=query,
+            token=token,
+        )
         data = body.get("data")
         return data if isinstance(data, list) else []
 
     def create(self, doctype: str, values: dict[str, Any]) -> dict[str, Any]:
-        body = self.request("POST", f"/api/resource/{urllib.parse.quote(doctype, safe='')}", payload={"doctype": doctype, **values})
+        body = self.request(
+            "POST",
+            f"/api/resource/{urllib.parse.quote(doctype, safe='')}",
+            payload={"doctype": doctype, **values},
+        )
         data = body.get("data")
         return data if isinstance(data, dict) else {}
 
@@ -187,9 +207,14 @@ class FrappeAdminClient:
             form=True,
         )
         message = body.get("message")
-        if not isinstance(message, dict) or not message.get("api_key") or not message.get("api_secret"):
+        if (
+            not isinstance(message, dict)
+            or not message.get("api_key")
+            or not message.get("api_secret")
+        ):
             raise FrappeRequestError("invalid_token_response")
         return str(message["api_key"]), str(message["api_secret"])
+
 
 def add_read_permission(container: str, site: str, doctype: str) -> None:
     kwargs = json.dumps(
@@ -208,7 +233,9 @@ def add_read_permission(container: str, site: str, doctype: str) -> None:
         "--kwargs",
         kwargs,
     ]
-    result = subprocess.run(command, capture_output=True, text=True, timeout=60, check=False)
+    result = subprocess.run(
+        command, capture_output=True, text=True, timeout=60, check=False
+    )
     if result.returncode != 0:
         raise RuntimeError(f"permission_setup_failed:{doctype}")
 
@@ -241,14 +268,38 @@ def verify_token(client: FrappeAdminClient, token: tuple[str, str]) -> dict[str,
 
     custom_perms = client.list(
         "Custom DocPerm",
-        fields=["parent", "role", "read", "write", "create", "delete", "submit", "cancel", "amend", "share"],
+        fields=[
+            "parent",
+            "role",
+            "read",
+            "write",
+            "create",
+            "delete",
+            "submit",
+            "cancel",
+            "amend",
+            "share",
+        ],
         filters=[["role", "=", READER_ROLE]],
     )
     expected_doctypes = set(DASHBOARD_DOCTYPES)
-    relevant_perms = [row for row in custom_perms if row.get("parent") in expected_doctypes]
+    relevant_perms = [
+        row for row in custom_perms if row.get("parent") in expected_doctypes
+    ]
     permission_by_doctype = {str(row.get("parent")): row for row in relevant_perms}
     write_none = len(permission_by_doctype) == len(expected_doctypes) and all(
-        not any(bool(row.get(field)) for field in ("write", "create", "delete", "submit", "cancel", "amend", "share"))
+        not any(
+            bool(row.get(field))
+            for field in (
+                "write",
+                "create",
+                "delete",
+                "submit",
+                "cancel",
+                "amend",
+                "share",
+            )
+        )
         for row in permission_by_doctype.values()
     )
     return {
@@ -265,19 +316,32 @@ def inspect_state(client: FrappeAdminClient, token_file: Path) -> dict[str, Any]
     token_values = read_key_value_file(token_file)
     custom_perms = client.list(
         "Custom DocPerm",
-        fields=["parent", "role", "read", "write", "create", "delete", "report", "export"],
+        fields=[
+            "parent",
+            "role",
+            "read",
+            "write",
+            "create",
+            "delete",
+            "report",
+            "export",
+        ],
         filters=[["role", "=", READER_ROLE]],
     )
     return {
         "role_exists": role is not None,
         "user_exists": user is not None,
-        "token_file_exists": bool(token_values.get("api_key") and token_values.get("api_secret")),
+        "token_file_exists": bool(
+            token_values.get("api_key") and token_values.get("api_secret")
+        ),
         "custom_permission_rows": len(custom_perms),
     }
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
-    site, admin_user, admin_password = load_admin_values(Path(args.credentials), args.site)
+    site, admin_user, admin_password = load_admin_values(
+        Path(args.credentials), args.site
+    )
     client = FrappeAdminClient(args.base_url, site, admin_user, admin_password)
     client.login()
     before = inspect_state(client, Path(args.token_file))
@@ -299,7 +363,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     role = client.get("Role", READER_ROLE)
     if role is None:
-        client.create("Role", {"role_name": READER_ROLE, "is_custom": 1, "desk_access": 1, "disabled": 0})
+        client.create(
+            "Role",
+            {"role_name": READER_ROLE, "is_custom": 1, "desk_access": 1, "disabled": 0},
+        )
     else:
         # Frappe derives System User vs Website User from desk access. The
         # reader still has no write permissions, but must be a System User so
@@ -337,7 +404,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             token_verification = verify_token(client, token)
         except FrappeRequestError:
             token_verification = None
-    if not token_verification or not token_verification["read_all"] or not token_verification["write_none"]:
+    if (
+        not token_verification
+        or not token_verification["read_all"]
+        or not token_verification["write_none"]
+    ):
         # Frappe's generate_keys implementation only persists a new secret
         # when the user has no API key. Clear this reader's old key first so
         # the returned pair is the pair stored in Frappe.
@@ -361,17 +432,30 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--apply", action="store_true", help="perform the local Frappe setup")
-    parser.add_argument("--json", action="store_true", help="emit a machine-readable safe report")
-    parser.add_argument("--base-url", default=os.environ.get("FRAPPE_BASE_URL", DEFAULT_BASE_URL))
-    parser.add_argument("--site", default=os.environ.get("FRAPPE_SITE_NAME", DEFAULT_SITE))
+    parser.add_argument(
+        "--apply", action="store_true", help="perform the local Frappe setup"
+    )
+    parser.add_argument(
+        "--json", action="store_true", help="emit a machine-readable safe report"
+    )
+    parser.add_argument(
+        "--base-url", default=os.environ.get("FRAPPE_BASE_URL", DEFAULT_BASE_URL)
+    )
+    parser.add_argument(
+        "--site", default=os.environ.get("FRAPPE_SITE_NAME", DEFAULT_SITE)
+    )
     parser.add_argument("--container", default=DEFAULT_CONTAINER)
     parser.add_argument("--credentials", default=str(DEFAULT_ADMIN_CREDENTIALS))
     parser.add_argument("--token-file", default=str(DEFAULT_TOKEN_FILE))
     args = parser.parse_args(argv)
     try:
         report = run(args)
-    except (FrappeRequestError, OSError, RuntimeError, subprocess.SubprocessError) as exc:
+    except (
+        FrappeRequestError,
+        OSError,
+        RuntimeError,
+        subprocess.SubprocessError,
+    ) as exc:
         report = {
             "mode": "apply" if args.apply else "dry-run",
             "status": "blocked",
@@ -386,8 +470,12 @@ def main(argv: list[str] | None = None) -> int:
         if report.get("error_code"):
             print(f"  error: {report['error_code']}")
         else:
-            print(f"  mode: {report['mode']}; role: {report['role']}; user: {report['user']}")
-            print(f"  write performed: {report['write_performed']}; token ready: {report.get('token_ready', False)}")
+            print(
+                f"  mode: {report['mode']}; role: {report['role']}; user: {report['user']}"
+            )
+            print(
+                f"  write performed: {report['write_performed']}; token ready: {report.get('token_ready', False)}"
+            )
     return 0 if report["status"] in {"planned", "applied"} else 2
 
 

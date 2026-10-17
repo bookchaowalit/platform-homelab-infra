@@ -74,8 +74,17 @@ class MinioPolicyTests(unittest.TestCase):
         self.assertIn("s3:PutObject", actions(policy))
         self.assertIn("s3:GetObject", actions(policy))
         scoped = resources(policy)
-        self.assertTrue(all("/lake/landing/" in item or "/lake/bronze/" in item or "/lake/control/" in item for item in scoped))
-        self.assertFalse(any("/lake/silver/" in item or "/lake/gold/" in item for item in scoped))
+        self.assertTrue(
+            all(
+                "/lake/landing/" in item
+                or "/lake/bronze/" in item
+                or "/lake/control/" in item
+                for item in scoped
+            )
+        )
+        self.assertFalse(
+            any("/lake/silver/" in item or "/lake/gold/" in item for item in scoped)
+        )
         self.assertNotIn("s3:DeleteObject", actions(policy))
         self.assertNotIn("s3:ListBucket", actions(policy))
 
@@ -85,7 +94,9 @@ class MinioPolicyTests(unittest.TestCase):
         self.assertTrue(any("/lake/bronze/" in item for item in scoped))
         self.assertTrue(any("/lake/silver/" in item for item in scoped))
         self.assertTrue(any("/lake/gold/" in item for item in scoped))
-        self.assertTrue(any("/lake/control/manifests/derived/" in item for item in scoped))
+        self.assertTrue(
+            any("/lake/control/manifests/derived/" in item for item in scoped)
+        )
         self.assertFalse(any("/lake/landing/" in item for item in scoped))
         self.assertNotIn("s3:DeleteObject", actions(policy))
 
@@ -93,7 +104,9 @@ class MinioPolicyTests(unittest.TestCase):
         policy = load_policy("lake-consumer")
         scoped = resources(policy)
         self.assertTrue(scoped)
-        self.assertTrue(all("/lake/gold/" in item or item == BUCKET_ARN for item in scoped))
+        self.assertTrue(
+            all("/lake/gold/" in item or item == BUCKET_ARN for item in scoped)
+        )
         self.assertEqual(actions(policy), {"s3:ListBucket", "s3:GetObject"})
         self.assertNotIn("s3:PutObject", actions(policy))
         self.assertNotIn("s3:DeleteObject", actions(policy))
@@ -104,10 +117,20 @@ class MinioPolicyTests(unittest.TestCase):
         self.assertIn("s3:PutLifecycleConfiguration", actions(policy))
         self.assertIn("s3:DeleteObject", actions(policy))
         self.assertNotIn("iam:*", actions(policy))
-        self.assertTrue(all(item == BUCKET_ARN or item.startswith(OBJECT_ARN) for item in resources(policy)))
+        self.assertTrue(
+            all(
+                item == BUCKET_ARN or item.startswith(OBJECT_ARN)
+                for item in resources(policy)
+            )
+        )
 
     def test_policy_files_do_not_contain_secret_values(self):
-        forbidden = ("MINIO_ROOT_PASSWORD", "AWS_SECRET_ACCESS_KEY", "token=", "password=")
+        forbidden = (
+            "MINIO_ROOT_PASSWORD",
+            "AWS_SECRET_ACCESS_KEY",
+            "token=",
+            "password=",
+        )
         for path in POLICIES.values():
             text = path.read_text(encoding="utf-8").lower()
             for marker in forbidden:

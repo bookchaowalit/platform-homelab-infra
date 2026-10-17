@@ -12,7 +12,9 @@ ROOT = Path(__file__).resolve().parents[2]
 PROMETHEUS_CONFIG = ROOT / "self-hosted-stack/prometheus/prometheus.yml"
 PROMETHEUS_TARGETS = ROOT / "self-hosted-stack/prometheus/mlops-targets.json"
 PROMETHEUS_RULES = ROOT / "self-hosted-stack/prometheus/rules.yml"
-GRAFANA_DASHBOARD = ROOT / "self-hosted-stack/grafana/provisioning/dashboards/mlops-reference.json"
+GRAFANA_DASHBOARD = (
+    ROOT / "self-hosted-stack/grafana/provisioning/dashboards/mlops-reference.json"
+)
 
 
 class MLOpsObservabilityTests(unittest.TestCase):
@@ -37,10 +39,18 @@ class MLOpsObservabilityTests(unittest.TestCase):
             for panel in dashboard["panels"]
             for target in panel.get("targets", [])
         ]
-        self.assertTrue(any("solo_empire_mlops_requests_total" in expr for expr in expressions))
-        self.assertTrue(any("solo_empire_mlops_predictions_total" in expr for expr in expressions))
-        self.assertTrue(any("solo_empire_mlops_errors_total" in expr for expr in expressions))
-        self.assertTrue(any("solo_empire_mlops_model_info" in expr for expr in expressions))
+        self.assertTrue(
+            any("solo_empire_mlops_requests_total" in expr for expr in expressions)
+        )
+        self.assertTrue(
+            any("solo_empire_mlops_predictions_total" in expr for expr in expressions)
+        )
+        self.assertTrue(
+            any("solo_empire_mlops_errors_total" in expr for expr in expressions)
+        )
+        self.assertTrue(
+            any("solo_empire_mlops_model_info" in expr for expr in expressions)
+        )
 
 
 if __name__ == "__main__":
