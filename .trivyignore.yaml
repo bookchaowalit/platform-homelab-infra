@@ -1,0 +1,11 @@
+misconfigurations:
+  - id: DS-0002
+    paths:
+      - "infra/self-hosted-stack/data-lake/Dockerfile"
+    statement: >-
+      Accepted for now (DevSecOps Phase 1 exception), not a false positive: the optional
+      `streaming` lake worker runs as root because it writes to a host bind mount
+      (SOLO_EMPIRE_DATA_LAKE_PATH) whose ownership varies per homelab host. The image also only
+      builds from the solo-empire monorepo (its build context needs requirements-data-lake.txt and
+      scripts/data_lake, which moved to the data-lake repositories). Switch to a fixed non-root UID
+      with matching volume ownership when the worker image moves to its own repository.
