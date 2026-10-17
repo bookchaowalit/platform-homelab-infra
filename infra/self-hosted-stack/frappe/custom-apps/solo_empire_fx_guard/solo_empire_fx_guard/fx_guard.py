@@ -1,6 +1,6 @@
 """Trusted, provider-free FX validation for Sales Invoice before_submit."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 
@@ -12,7 +12,7 @@ def timestamp(value):
     try:
         if not isinstance(value, str) or not value.endswith("Z"):
             raise ValueError
-        return datetime.fromisoformat(value[:-1] + "+00:00")
+        return datetime.fromisoformat(value[:-1] + "+00:00")  # noqa: FURB162 - keep the explicit "Z" handling; lint pass is behaviour-neutral
     except (TypeError, ValueError):
         raise FXRejected("FX_TIME_ALIGNMENT_INVALID") from None
 
@@ -38,13 +38,20 @@ def validate_observation(*, currency, company_currency, rate, observation, now):
     if not isinstance(observation, dict):
         raise FXRejected("FX_SNAPSHOT_MISSING")
     if (observation.get("base_currency"), observation.get("quote_currency")) != (
-        currency, company_currency
+        currency,
+        company_currency,
     ):
         raise FXRejected("FX_DIRECT_PAIR_REQUIRED")
-    if observation.get("quality") != "verified" or observation.get("source_type") != "reference":
+    if (
+        observation.get("quality") != "verified"
+        or observation.get("source_type") != "reference"
+    ):
         raise FXRejected("FX_SNAPSHOT_UNVERIFIED")
     for field in ("source_ref", "reviewed_by"):
-        if not isinstance(observation.get(field), str) or not observation[field].strip():
+        if (
+            not isinstance(observation.get(field), str)
+            or not observation[field].strip()
+        ):
             raise FXRejected("FX_PROVENANCE_MISSING")
     observed = timestamp(observation.get("as_of"))
     captured = timestamp(observation.get("captured_at"))
@@ -62,10 +69,15 @@ def validate_sales_invoice(doc, method=None):
     import frappe
 
     try:
-        company_currency = frappe.db.get_value("Company", doc.company, "default_currency")
+        company_currency = frappe.db.get_value(
+            "Company", doc.company, "default_currency"
+        )
         observation = None
         if doc.currency != company_currency:
-            if frappe.db.get_single_value("Currency Exchange Settings", "disabled") != 1:
+            if (
+                frappe.db.get_single_value("Currency Exchange Settings", "disabled")
+                != 1
+            ):
                 raise FXRejected("FX_EXTERNAL_LOOKUP_ENABLED")
             snapshots = frappe.conf.get("solo_fx_approved_snapshots")
             snapshot_id = doc.get("custom_fx_snapshot_id")
@@ -79,7 +91,7 @@ def validate_sales_invoice(doc, method=None):
             company_currency=company_currency,
             rate=doc.conversion_rate,
             observation=observation,
-            now=datetime.now(timezone.utc),
+            now=datetime.now(UTC),
         )
     except FXRejected as exc:
         frappe.throw(str(exc))

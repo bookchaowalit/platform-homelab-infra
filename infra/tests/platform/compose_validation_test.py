@@ -14,7 +14,6 @@ Checks:
 
 from __future__ import annotations
 
-import argparse
 import re
 import sys
 from pathlib import Path
@@ -24,8 +23,7 @@ PLATFORM_SCRIPTS = ROOT / "infra" / "scripts" / "platform"
 if str(PLATFORM_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(PLATFORM_SCRIPTS))
 
-from platform_output import configure_utf8_stdio  # noqa: E402
-
+from platform_output import configure_utf8_stdio
 
 PLATFORM = ROOT / "infra" / "platform"
 OPS_PLATFORM = ROOT / "operations" / "platform"
@@ -39,9 +37,15 @@ GITOPS = PLATFORM / "gitops"
 
 # Patterns that indicate committed secrets in production-target paths
 SECRET_PATTERNS = [
-    re.compile(r"soloempire2026", re.I),
-    re.compile(r"password\s*[:=]\s*['\"]?(?!change-me|changeme|\$\{|<.*>|your-|placeholder|example)[^\s'\"]{8,}", re.I),
-    re.compile(r"(api[_-]?key|secret[_-]?key|private[_-]?key)\s*[:=]\s*['\"][A-Za-z0-9/+=]{16,}['\"]", re.I),
+    re.compile(r"soloempire2026", re.IGNORECASE),
+    re.compile(
+        r"password\s*[:=]\s*['\"]?(?!change-me|changeme|\$\{|<.*>|your-|placeholder|example)[^\s'\"]{8,}",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(api[_-]?key|secret[_-]?key|private[_-]?key)\s*[:=]\s*['\"][A-Za-z0-9/+=]{16,}['\"]",
+        re.IGNORECASE,
+    ),
     re.compile(r"AKIA[0-9A-Z]{16}"),
     re.compile(r"ghp_[A-Za-z0-9]{20,}"),
     re.compile(r"xox[bpas]-[A-Za-z0-9-]{10,}"),
@@ -50,7 +54,7 @@ SECRET_PATTERNS = [
 # Match image references ending in :latest, but not policy patterns like "!*:latest"
 LATEST_IMAGE = re.compile(
     r"""(?:image:\s*|repository:\s*)['"]?([A-Za-z0-9._\-]+(?:/[A-Za-z0-9._\-]+)*:latest)['"]?""",
-    re.I,
+    re.IGNORECASE,
 )
 
 # Known lab-only :latest exceptions (annotated in compose; not production targets)
@@ -110,7 +114,7 @@ def test_compose_security(c: Checker) -> None:
     else:
         c.ok("Compose secrets use environment variables")
 
-    if '"80:80"' not in text and '"443:443"' not in text and 'api@internal' not in text:
+    if '"80:80"' not in text and '"443:443"' not in text and "api@internal" not in text:
         c.ok("Traefik administrative dashboard is not published")
     else:
         c.fail("Traefik administrative dashboard must remain unpublished")
@@ -124,7 +128,9 @@ def test_compose_security(c: Checker) -> None:
 
     if "insecure: true" in text:
         c.fail("Traefik insecure dashboard mode remains enabled")
-    elif "insecure: false" in (ROOT / "infra" / "self-hosted-stack" / "traefik" / "traefik.yml").read_text(encoding="utf-8"):
+    elif "insecure: false" in (
+        ROOT / "infra" / "self-hosted-stack" / "traefik" / "traefik.yml"
+    ).read_text(encoding="utf-8"):
         c.ok("Traefik insecure dashboard mode disabled")
     else:
         c.fail("Traefik dashboard mode is not explicitly fail-closed")
@@ -134,8 +140,13 @@ def test_compose_security(c: Checker) -> None:
     else:
         c.fail("CoreDNS host ports are not restricted to localhost")
 
-    traefik_cfg = (ROOT / "infra" / "self-hosted-stack" / "traefik" / "traefik.yml").read_text(encoding="utf-8")
-    if "http://docker-socket-proxy:2375" in traefik_cfg and "unix:///var/run/docker.sock" not in traefik_cfg:
+    traefik_cfg = (
+        ROOT / "infra" / "self-hosted-stack" / "traefik" / "traefik.yml"
+    ).read_text(encoding="utf-8")
+    if (
+        "http://docker-socket-proxy:2375" in traefik_cfg
+        and "unix:///var/run/docker.sock" not in traefik_cfg
+    ):
         c.ok("Traefik uses the Docker API proxy")
     else:
         c.fail("Traefik still depends on a direct Docker socket")
@@ -147,40 +158,83 @@ def test_compose_security(c: Checker) -> None:
         c.fail("Docker API control network must be internal-only")
 
     proxy_block = re.search(r"(?ms)^  docker-socket-proxy:\n(.*?)(?=^  \S|\Z)", text)
-    if proxy_block and "- docker-control-net" in proxy_block.group(1) and "- solo-empire-net" not in proxy_block.group(1):
+    if (
+        proxy_block
+        and "- docker-control-net" in proxy_block.group(1)
+        and "- solo-empire-net" not in proxy_block.group(1)
+    ):
         c.ok("Docker socket proxy is isolated from the application network")
     else:
         c.fail("Docker socket proxy must not share the application network")
 
-    if proxy_block and all(flag in proxy_block.group(1) for flag in ("POST=0", "DELETE=0", "CONTAINERS=1", "EVENTS=1", "INFO=1", "NETWORKS=1")):
+    if proxy_block and all(
+        flag in proxy_block.group(1)
+        for flag in (
+            "POST=0",
+            "DELETE=0",
+            "CONTAINERS=1",
+            "EVENTS=1",
+            "INFO=1",
+            "NETWORKS=1",
+        )
+    ):
         c.ok("Docker socket proxy exposes an explicit read-only discovery allowlist")
     else:
-        c.fail("Docker socket proxy allowlist is broader than the read-only Traefik contract")
+        c.fail(
+            "Docker socket proxy allowlist is broader than the read-only Traefik contract"
+        )
 
     service_blocks = {
         match.group(1): match.group(2)
-        for match in re.finditer(r"(?ms)^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:\n|\Z)", text)
+        for match in re.finditer(
+            r"(?ms)^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:\n|\Z)", text
+        )
     }
-    socket_services = [name for name, block in service_blocks.items() if "/var/run/docker.sock" in block]
+    socket_services = [
+        name
+        for name, block in service_blocks.items()
+        if "/var/run/docker.sock" in block
+    ]
     allowed_socket_services = {
-        "docker-socket-proxy", "portainer", "dozzle", "watchtower", "autoheal",
-        "diun", "uptime-kuma", "trivy", "woodpecker-agent", "kestra",
+        "docker-socket-proxy",
+        "portainer",
+        "dozzle",
+        "watchtower",
+        "autoheal",
+        "diun",
+        "uptime-kuma",
+        "trivy",
+        "woodpecker-agent",
+        "kestra",
     }
     unexpected_socket_services = sorted(set(socket_services) - allowed_socket_services)
     if unexpected_socket_services:
-        c.fail(f"Unreviewed direct Docker socket consumers: {unexpected_socket_services}")
+        c.fail(
+            f"Unreviewed direct Docker socket consumers: {unexpected_socket_services}"
+        )
     else:
-        c.ok(f"Direct Docker socket consumers remain explicitly allow-listed ({len(socket_services)})")
+        c.ok(
+            f"Direct Docker socket consumers remain explicitly allow-listed ({len(socket_services)})"
+        )
 
     profile_expectations = {
-        "portainer": "docker-admin", "dozzle": "docker-admin", "watchtower": "lab-auto-update",
-        "autoheal": "docker-control", "diun": "docker-control", "uptime-kuma": "docker-control",
-        "trivy": "docker-control", "woodpecker-agent": "docker-control", "kestra": "data",
+        "portainer": "docker-admin",
+        "dozzle": "docker-admin",
+        "watchtower": "lab-auto-update",
+        "autoheal": "docker-control",
+        "diun": "docker-control",
+        "uptime-kuma": "docker-control",
+        "trivy": "docker-control",
+        "woodpecker-agent": "docker-control",
+        "kestra": "data",
     }
     profile_failures = [
         f"{name} missing explicit {profile} profile"
         for name, profile in profile_expectations.items()
-        if name in service_blocks and not re.search(rf"^\s+- {re.escape(profile)}\s*$", service_blocks[name], re.M)
+        if name in service_blocks
+        and not re.search(
+            rf"^\s+- {re.escape(profile)}\s*$", service_blocks[name], re.MULTILINE
+        )
     ]
     if profile_failures:
         c.fail("; ".join(profile_failures))
@@ -221,15 +275,15 @@ def test_compose_security(c: Checker) -> None:
         c.fail("Missing deploy.resources for core services")
 
 
-
-
 def main() -> int:
     configure_utf8_stdio()
     c = Checker()
     print("Solo Empire homelab compose validation (offline)")
     test_compose_security(c)
     print("\n" + "=" * 60)
-    print(f"Passed: {c.passed}  Failures: {len(c.failures)}  Warnings: {len(c.warnings)}")
+    print(
+        f"Passed: {c.passed}  Failures: {len(c.failures)}  Warnings: {len(c.warnings)}"
+    )
     if c.failures:
         for f in c.failures:
             print(f"  - {f}")

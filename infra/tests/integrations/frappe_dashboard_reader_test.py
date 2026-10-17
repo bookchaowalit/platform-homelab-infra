@@ -12,13 +12,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "infra" / "scripts" / "sync"))
 
-from frappe_dashboard_reader import read_key_value_file, write_token_file  # noqa: E402
+from frappe_dashboard_reader import read_key_value_file, write_token_file
 
 
 def test_token_file_is_minimal_and_private() -> None:
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "dashboard-reader.env"
-        write_token_file(path, "solo-empire.localhost", ("synthetic-key", "synthetic-secret"))
+        write_token_file(
+            path, "solo-empire.localhost", ("synthetic-key", "synthetic-secret")
+        )
         values = read_key_value_file(path)
         assert values == {
             "site_name": "solo-empire.localhost",
