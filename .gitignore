@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 infra/self-hosted-stack/.env
 infra/self-hosted-stack/frappe/.runtime/
+.venv/
+.mypy_cache/
+.ruff_cache/

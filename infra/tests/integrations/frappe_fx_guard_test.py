@@ -12,6 +12,7 @@ spec = importlib.util.spec_from_file_location(
     "frappe_fx_guard",
     Path(__file__).resolve().parents[2] / "scripts/sync/frappe_fx_guard.py",
 )
+assert spec is not None and spec.loader is not None
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
 

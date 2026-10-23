@@ -2,13 +2,14 @@
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from typing import Any
 
 
 class FXRejected(ValueError):
     """Contains only a stable reason code, never document or source data."""
 
 
-def timestamp(value):
+def timestamp(value: object) -> datetime:
     try:
         if not isinstance(value, str) or not value.endswith("Z"):
             raise ValueError
@@ -17,7 +18,7 @@ def timestamp(value):
         raise FXRejected("FX_TIME_ALIGNMENT_INVALID") from None
 
 
-def amount(value):
+def amount(value: object) -> Decimal:
     try:
         number = Decimal(str(value))
         if not number.is_finite() or number <= 0:
@@ -27,7 +28,14 @@ def amount(value):
         raise FXRejected("FX_RATE_INVALID") from None
 
 
-def validate_observation(*, currency, company_currency, rate, observation, now):
+def validate_observation(
+    *,
+    currency: object,
+    company_currency: object,
+    rate: object,
+    observation: object,
+    now: datetime,
+) -> None:
     """Validate one direct observation at server submission time (inclusive 24h)."""
     if not currency or not company_currency:
         raise FXRejected("FX_CURRENCY_MISSING")
@@ -64,7 +72,7 @@ def validate_observation(*, currency, company_currency, rate, observation, now):
         raise FXRejected("FX_RATE_MISMATCH")
 
 
-def validate_sales_invoice(doc, method=None):
+def validate_sales_invoice(doc: Any, method: str | None = None) -> None:
     """Frappe before_submit adapter: every non-base invoice requires evidence."""
     import frappe
 

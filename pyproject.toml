@@ -1,0 +1,45 @@
+# Repo tooling only: the scripts under infra/ use the Python standard library, so this project
+# has no runtime dependencies. It pins the dev tools (lint, type check) in uv.lock for CI.
+# The Frappe custom app under infra/self-hosted-stack/frappe/custom-apps/ keeps its own
+# pyproject.toml (installed by bench inside the Frappe image, frappe provided there).
+[project]
+name = "platform-homelab-infra-tooling"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["mypy>=1.13", "ruff>=0.8"]
+
+[tool.uv]
+package = false
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["infra"]
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+# Frappe is only importable inside the bench image.
+module = ["frappe", "frappe.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# The offline suites are standalone unittest scripts: checked for type errors, but their
+# test methods need no annotations.
+module = ["infra.tests.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
+
+[[tool.mypy.overrides]]
+# Imported by its test through sys.path; the module itself is checked as infra/scripts/sync/.
+module = ["frappe_dashboard_reader"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Resolved through sys.path at run time (host-test import shim and its suite); the targets are
+# checked under their own paths.
+module = ["solo_empire_fx_guard.*", "platform_output"]
+ignore_missing_imports = true

@@ -16,11 +16,11 @@ CUSTOM_FIELDS = {
 }
 
 
-def after_install():
+def after_install() -> None:
     create_custom_fields(CUSTOM_FIELDS, update=True)
 
 
-def before_uninstall():
+def before_uninstall() -> None:
     for field in CUSTOM_FIELDS["Sales Invoice"]:
         name = f"Sales Invoice-{field['fieldname']}"
         if frappe.db.exists("Custom Field", name):

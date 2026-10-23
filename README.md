@@ -16,6 +16,16 @@ python3 infra/tests/data_lake/minio_policy_test.py
 cd infra/self-hosted-stack && set -a && . ./.env.example && set +a && docker compose config --quiet
 ```
 
+Lint และ type check (เหมือน CI, เครื่องมือ pin ไว้ใน `uv.lock` ที่ root — สคริปต์ใช้แค่ stdlib):
+
+```bash
+uv sync --frozen --all-extras
+uv run ruff check . && uv run ruff format --check .
+uv run mypy .   # strict สำหรับสคริปต์และ custom app; test ผ่อนเรื่อง annotation
+```
+
+สิ่งที่ repo นี้เป็นและไม่เป็น: [PRODUCT.md](PRODUCT.md)
+
 ## หมายเหตุ
 
 - `infra/self-hosted-stack/data-lake/Dockerfile` ยัง COPY `scripts/data_lake` จาก monorepo เดิม — ต้องชี้ไป repo `data-lake` ก่อน build ใหม่
