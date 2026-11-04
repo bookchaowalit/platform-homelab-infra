@@ -24,7 +24,7 @@ flowchart TD
     L2 --> F
     L3 --> F
     GH --> F2["Fix on branch or main, re-run CI"]
-    F -->|"config"| F3["Edit compose or config, docker compose restart service"]
+    F -->|"config"| F3["Compose change (env, ports, mounts): docker compose up -d service; bind-mounted app config only: docker compose restart service"]
     F -->|"bad image"| F4["Pin previous tag in compose, up -d"]
     F -->|"data loss"| F5["Restore from backup.sh archives by hand, no restore script (gap)"]
     F3 --> PM["Postmortem: no template or location in repo (gap)"]

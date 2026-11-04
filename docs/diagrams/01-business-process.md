@@ -10,7 +10,7 @@ flowchart TD
     A["Owner clones repo"] --> B["cp .env.example .env and set local secrets"]
     B --> C{"Which work?"}
     C -->|"shared lab"| D["scripts/lab-up.sh profile ..."]
-    C -->|"Frappe ERP"| F1["docker compose -f frappe/compose.yaml up -d"]
+    C -->|"Frappe ERP"| F1["cd frappe; docker compose --env-file .runtime/compose.env --project-name solo-empire-frappe -f compose.yaml up -d"]
     D --> D1{"Profile known?"}
     D1 -->|"no"| D2["Print usage, exit 1"]
     D1 -->|"yes"| D3["docker compose --profile ... up -d"]
